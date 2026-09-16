@@ -81,8 +81,8 @@ var ServiceCatalogMarkdownGenerator = (function() {
             if (!gs.nil(policyGr.catalog_conditions))
                 markdownLines.push("- **Catalog conditions:**" + varMap.decodeConditionString(policyGr.catalog_conditions, context));
             uiPolicyInfo.applies_catalog = context.pushListItemIfTrue(policyGr.applies_catalog, markdownLines) == true;
-            uiPolicyInfo.applies_catalog = context.pushListItemIfTrue(policyGr.applies_sc_task, markdownLines) == true;
-            uiPolicyInfo.applies_catalog = context.pushListItemIfTrue(policyGr.applies_req_item, markdownLines) == true;
+            uiPolicyInfo.applies_sc_task = context.pushListItemIfTrue(policyGr.applies_sc_task, markdownLines) == true;
+            uiPolicyInfo.applies_req_item = context.pushListItemIfTrue(policyGr.applies_req_item, markdownLines) == true;
             context.pushListItemIfTrue(policyGr.on_load, markdownLines);
             context.pushListItemIfTrue(policyGr.reverse_if_false, markdownLines);
             context.pushListItemIfTrue(policyGr.run_scripts, markdownLines);
@@ -199,7 +199,7 @@ var ServiceCatalogMarkdownGenerator = (function() {
      * @param {(VariableMap)} varMap
      * @param {string[]} markdownLines
      * @param {MarkdownGenerationContext} context
-     * @returns {ClientScriptInfo}
+     * @returns {ClientScriptInfo[]}
      */
     function pushCatalogClientScriptsSection(filterField, filterValue, varMap, markdownLines, context) {
         var scriptGr = new GlideRecord('catalog_script_client');
@@ -212,7 +212,7 @@ var ServiceCatalogMarkdownGenerator = (function() {
 
         markdownLines.push('', '## Client Scripts');
 
-        /** @type {ClientScriptInfo} */
+        /** @type {ClientScriptInfo[]} */
         var results = [];
         while (scriptGr.next()) {
             /** @type {ClientScriptInfo} */
@@ -261,8 +261,6 @@ var ServiceCatalogMarkdownGenerator = (function() {
         }
         return results;
     }
-
-    // /** @typedef {(QuestionItemOld & { field: string })} RecordProducerQuestionItemOld */
 
     /**
      * @param {(GlideRecord | GlideRecordSecure)} catItemGr - sc_cat_item_producer
