@@ -37,7 +37,7 @@ var ServiceCatalogMarkdownGenerator = (function() {
         }
     }
 
-    var emptyFuncRe = /^[\r\n\s]*function\s+onCondition\s*\(\s*\)[\r\n\s]*\{[\r\n\s]*\}[\r\n\s]*$/g;
+    var emptyFuncRe = /^[\r\n\s]*function\s+\w+\s*\(\s*\)[\r\n\s]*\{[\r\n\s]*\}[\r\n\s]*$/g;
 
     /**
      * @param {string} filterField
@@ -45,6 +45,7 @@ var ServiceCatalogMarkdownGenerator = (function() {
      * @param {(VariableMap)} varMap
      * @param {string[]} markdownLines
      * @param {MarkdownGenerationContext} context
+     * @returns {UIPolicyInfo[]}
      */
     function pushCatalogUiPoliciesSection(filterField, filterValue, varMap, markdownLines, context) {
         var policyGr = new GlideRecord('catalog_ui_policy');
@@ -53,21 +54,35 @@ var ServiceCatalogMarkdownGenerator = (function() {
         policyGr.orderBy('short_description');
         policyGr.query();
         if (!policyGr.next())
-            return;
+            return [];
 
+        /** @type {UIPolicyInfo[]} */
+        var results = [];
         var question_text;
         markdownLines.push('', '## Catalog UI Policies');
         do {
-            markdownLines.push('', '### UI Policy: ' + MarkdownGenerationContext.escapeForMarkdown(policyGr.getValue('short_description')), '');
+            /** @type {UIPolicyInfo} */
+            var uiPolicyInfo = {
+                sys_id: policyGr.getUniqueValue(),
+                short_description: MarkdownGenerationContext.escapeForMarkdown(policyGr.getValue('short_description')),
+                actions: []
+            };
+            uiPolicyInfo.fragment = 'ui-policy-' + MarkdownGenerationContext.convertToHeadingFragment(uiPolicyInfo.short_description);
+            if (!gs.nil(policyGr.order))
+                uiPolicyInfo.order = {
+                    display_value: policyGr.getDisplayValue('order'),
+                    value: parseInt(policyGr.getValue('order'))
+                };
+            markdownLines.push('', '### UI Policy: ' + uiPolicyInfo.short_description, '');
             /** @type {tyLabeledMultilineStackItem[]} */
             var multiLineStack = [];
             /** @type {(QuestionItem | undefined)} */
             var item = undefined;
             if (!gs.nil(policyGr.catalog_conditions))
-                markdownLines.push("- **Catalog conditions:**" + varMap.decodeConditionString(policyGr.getValue('catalog_conditions'), context));
-            context.pushListItemIfTrue(policyGr.applies_catalog, markdownLines);
-            context.pushListItemIfTrue(policyGr.applies_sc_task, markdownLines);
-            context.pushListItemIfTrue(policyGr.applies_req_item, markdownLines);
+                markdownLines.push("- **Catalog conditions:**" + varMap.decodeConditionString(policyGr.catalog_conditions, context));
+            uiPolicyInfo.applies_catalog = context.pushListItemIfTrue(policyGr.applies_catalog, markdownLines) == true;
+            uiPolicyInfo.applies_catalog = context.pushListItemIfTrue(policyGr.applies_sc_task, markdownLines) == true;
+            uiPolicyInfo.applies_catalog = context.pushListItemIfTrue(policyGr.applies_req_item, markdownLines) == true;
             context.pushListItemIfTrue(policyGr.on_load, markdownLines);
             context.pushListItemIfTrue(policyGr.reverse_if_false, markdownLines);
             context.pushListItemIfTrue(policyGr.run_scripts, markdownLines);
@@ -84,68 +99,81 @@ var ServiceCatalogMarkdownGenerator = (function() {
             if (actionGr.next()) {
                 markdownLines.push('', '**Catalog UI Policy Actions:**', '', '| Name | Mandatory | Visible | Read only | Order | Value action |', '| ---- | --------- | ------- | --------- | ----- | ------------ |');
                 do {
-                    var vn = actionGr.getValue('variable');
-                    item = varMap.getVariableByName(vn);
+                    /** @type {UIPolicyActionInfo} */
+                    var actionInfo = {
+                        sys_id: actionGr.getUniqueValue(),
+                        variable: actionGr.getValue('variable')
+                    };
+                    item = varMap.getVariableByName(actionInfo.variable);
                     if (!item) {
-                        markdownLines.push('| ' + vn + ' *\\(not found\\)* | Mandatory | Visible | Read only | Order | Value action |');
+                        markdownLines.push('| ' + actionInfo.variable + ' *\\(not found\\)* | | | | | |');
                         continue;
                     }
                     question_text = item.question_text ? item.question_text : item.name;
                     var lineText = "| [" + MarkdownGenerationContext.escapeForTableCellMarkdown(question_text) + ((typeof item !== 'undefined' && item.set_map) ? "](#variable-set-" : "](#variable-") + MarkdownGenerationContext.convertToHeadingFragment(question_text) + ") | ";
                     switch (actionGr.getValue('mandatory')) {
                         case 'true':
-                            lineText += 'True |';
+                            actionInfo.mandatory = "True";
                             break;
                         case 'false':
-                            lineText += 'False |';
+                            actionInfo.mandatory = "False";
                             break;
                         default:
-                            lineText += 'Leave alone |';
+                            actionInfo.mandatory = "Leave alone";
                             break;
                     }
                     switch (actionGr.getValue('visible')) {
                         case 'true':
-                            lineText += 'True |';
+                            actionInfo.visible = "True";
                             break;
                         case 'false':
-                            lineText += 'False |';
+                            actionInfo.visible = "False";
                             break;
                         default:
-                            lineText += 'Leave alone |';
+                            actionInfo.visible = "Leave alone";
                             break;
                     }
                     switch (actionGr.getValue('disabled')) {
                         case 'true':
-                            lineText += 'True |';
+                            actionInfo.disabled = "True";
                             break;
                         case 'false':
-                            lineText += 'False |';
+                            actionInfo.disabled = "False";
                             break;
                         default:
-                            lineText += 'Leave alone |';
+                            actionInfo.disabled = "Leave alone";
                             break;
                     }
+                    lineText += actionInfo.mandatory + ' | ' + actionInfo.visible + ' | ' + actionInfo.disabled + ' | ';
                     if (gs.nil(actionGr.order))
-                        lineText += ' |';
-                    else
-                        lineText += actionGr.getDisplayValue('order') + ' |';
+                        lineText += '| ';
+                    else {
+                        lineText += actionGr.getDisplayValue('order') + ' | ';
+                        actionInfo.order = {
+                            display_value: actionGr.getDisplayValue('order'),
+                            value: parseInt(actionGr.getValue('order'))
+                        };
+                    }
                     if (actionGr.cleared)
-                        lineText += "Clear value |";
+                        actionInfo.value_action = "Clear value";
                     else
                         switch (actionGr.getValue('value_action')) {
                             case 'clear_value':
-                                lineText += 'Clear value |';
+                                actionInfo.value_action = 'Clear value';
                                 break;
                             case 'set_value':
-                                lineText += 'Set value: ' +  MarkdownGenerationContext.escapeForTableCellMarkdown(actionGr.getDisplayValue('value')) + ' |';
+                                actionInfo.value_action = 'Set value: ' + MarkdownGenerationContext.escapeForTableCellMarkdown(actionGr.getDisplayValue('value'));
                                 break;
                             default:
-                                lineText += 'Leave alone |';
+                                actionInfo.value_action = 'Leave alone';
                                 break;
                         }
-                    markdownLines.push(lineText);
+                    markdownLines.push(lineText + actionInfo.value_action + " |");
                 } while (actionGr.next());
+                uiPolicyInfo.actions.push(actionInfo);
             }
+
+            results.push(uiPolicyInfo);
 
             if (policyGr.getDisplayValue('run_scripts') == 'true') {
                 var scriptText;
@@ -161,6 +189,8 @@ var ServiceCatalogMarkdownGenerator = (function() {
                 }
             }
         } while (policyGr.next());
+
+        return results;
     }
 
     /**
@@ -169,6 +199,7 @@ var ServiceCatalogMarkdownGenerator = (function() {
      * @param {(VariableMap)} varMap
      * @param {string[]} markdownLines
      * @param {MarkdownGenerationContext} context
+     * @returns {ClientScriptInfo}
      */
     function pushCatalogClientScriptsSection(filterField, filterValue, varMap, markdownLines, context) {
         var scriptGr = new GlideRecord('catalog_script_client');
@@ -177,14 +208,27 @@ var ServiceCatalogMarkdownGenerator = (function() {
         scriptGr.orderBy('name');
         scriptGr.query();
         if (!scriptGr.hasNext())
-            return;
+            return [];
 
         markdownLines.push('', '## Client Scripts');
 
+        /** @type {ClientScriptInfo} */
+        var results = [];
         while (scriptGr.next()) {
+            /** @type {ClientScriptInfo} */
+            var clientScriptInfo = {
+                sys_id: scriptGr.getUniqueValue(),
+                name: MarkdownGenerationContext.minimalEscapeForMarkdown(scriptGr.getValue('name'))
+            };
+            clientScriptInfo.fragment = 'client-script-' + MarkdownGenerationContext.convertToHeadingFragment(clientScriptInfo.name);
+            if (!gs.nil(scriptGr.order))
+                clientScriptInfo.order = {
+                    display_value: scriptGr.getDisplayValue('order'),
+                    value: parseInt(scriptGr.getValue('order'))
+                };
             /** @type {tyLabeledMultilineStackItem[]} */
             var multiLineStack = [];
-            markdownLines.push('', '### Client Script: ' + scriptGr.getValue('name'), '');
+            markdownLines.push('', '### Client Script: ' + clientScriptInfo.name, '');
             context.pushDisplayValueListItem(scriptGr.applies_to, markdownLines, multiLineStack);
             context.pushDisplayValueListItem(scriptGr.ui_type, markdownLines, multiLineStack);
             context.pushDisplayValueListItem(scriptGr.type, markdownLines, multiLineStack);
@@ -197,15 +241,17 @@ var ServiceCatalogMarkdownGenerator = (function() {
                 if (item) {
                     var question_text = item.question_text ? item.question_text : item.name;
                     markdownLines.push("- **Variable name:** [" + MarkdownGenerationContext.escapeForMarkdown(question_text) + (item.set_map ? "](#variable-set-" : "](#variable-") + MarkdownGenerationContext.convertToHeadingFragment(question_text) + ")");
+                    clientScriptInfo.variable = item.name;
+                    results.push(clientScriptInfo);
                 } else
                     markdownLines.push("- **Variable name:** `" + id + "`");
             }
             context.pushDisplayValueListItem(scriptGr.order, markdownLines, multiLineStack);
-            context.pushListItemIfTrue(scriptGr.applies_catalog, markdownLines);
-            context.pushListItemIfTrue(scriptGr.applies_req_item, markdownLines);
-            context.pushListItemIfTrue(scriptGr.applies_sc_task, markdownLines);
-            context.pushListItemIfTrue(scriptGr.applies_extended, markdownLines);
-            context.pushListItemIfTrue(scriptGr.global, markdownLines);
+            clientScriptInfo.applies_catalog = context.pushListItemIfTrue(scriptGr.applies_catalog, markdownLines) == true;
+            clientScriptInfo.applies_req_item = context.pushListItemIfTrue(scriptGr.applies_req_item, markdownLines) == true;
+            clientScriptInfo.applies_sc_task = context.pushListItemIfTrue(scriptGr.applies_sc_task, markdownLines) == true;
+            clientScriptInfo.applies_extended = context.pushListItemIfTrue(scriptGr.applies_extended, markdownLines) == true;
+            clientScriptInfo.global = context.pushListItemIfTrue(scriptGr.global, markdownLines) == true;
             context.pushListItemIfFalse(scriptGr.isolate_script, markdownLines);
             context.pushMultiLineItems(multiLineStack, markdownLines);
             if (!gs.nil(scriptGr.description))
@@ -213,6 +259,7 @@ var ServiceCatalogMarkdownGenerator = (function() {
             if (!gs.nil(scriptGr.script))
                 markdownLines.push('', "**Script:**", '', '```javascript', scriptGr.getValue('script'), '```');
         }
+        return results;
     }
 
     // /** @typedef {(QuestionItemOld & { field: string })} RecordProducerQuestionItemOld */
@@ -251,13 +298,20 @@ var ServiceCatalogMarkdownGenerator = (function() {
 
         /** @type {VariableMap} */
         var varMap = new VariableMap(catItemGr);
-        varMap.pushVariablesSectionMarkdown(context, markdownLines);
+        var catalogUiPoliciesSection = [];
+        var uiPolicies = pushCatalogUiPoliciesSection('catalog_item', catItemGr.getUniqueValue(), varMap, catalogUiPoliciesSection, context);
+        var catalogClientScriptsSection = [];
+        var clientScripts = pushCatalogClientScriptsSection('cat_item', catItemGr.getUniqueValue(), varMap, catalogClientScriptsSection, context);
+
+        varMap.pushVariablesSectionMarkdown(context, uiPolicies, clientScripts, markdownLines);
 
         context.pushClodeBlock(catItemGr.script, 'javascript', markdownLines, 2);
 
         pushAvailabilitySection(catItemGr, markdownLines, context);
-        pushCatalogUiPoliciesSection('catalog_item', catItemGr.getUniqueValue(), varMap, markdownLines, context);
-        pushCatalogClientScriptsSection('cat_item', catItemGr.getUniqueValue(), varMap, markdownLines, context);
+        if (catalogUiPoliciesSection.length > 0)
+            markdownLines = markdownLines.concat(catalogUiPoliciesSection);
+        if (catalogClientScriptsSection.length > 0)
+            markdownLines = markdownLines.concat(catalogClientScriptsSection);
 
         return markdownLines.join("\n") + "\n";
     }
@@ -312,11 +366,19 @@ var ServiceCatalogMarkdownGenerator = (function() {
 
         /** @type {VariableMap} */
         var varMap = new VariableMap(catItemGr);
-        varMap.pushVariablesSectionMarkdown(context, markdownLines);
+        var catalogUiPoliciesSection = [];
+        var uiPolicies = pushCatalogUiPoliciesSection('catalog_item', catItemGr.getUniqueValue(), varMap, catalogUiPoliciesSection, context);
+        var catalogClientScriptsSection = [];
+        var clientScripts = pushCatalogClientScriptsSection('cat_item', catItemGr.getUniqueValue(), varMap, catalogClientScriptsSection, context);
+
+        // return markdownLines.join("\n") + "\n";
+        varMap.pushVariablesSectionMarkdown(context, uiPolicies, clientScripts, markdownLines);
 
         pushAvailabilitySection(catItemGr, markdownLines, context);
-        pushCatalogUiPoliciesSection('catalog_item', catItemGr.getUniqueValue(), varMap, markdownLines, context);
-        pushCatalogClientScriptsSection('cat_item', catItemGr.getUniqueValue(), varMap, markdownLines, context);
+        if (catalogUiPoliciesSection.length > 0)
+            markdownLines = markdownLines.concat(catalogUiPoliciesSection);
+        if (catalogClientScriptsSection.length > 0)
+            markdownLines = markdownLines.concat(catalogClientScriptsSection);
 
         return markdownLines.join("\n") + "\n";
     }
@@ -347,10 +409,16 @@ var ServiceCatalogMarkdownGenerator = (function() {
 
         /** @type {VariableMap} */
         var varMap = new VariableMap(varSetGr);
-        varMap.pushVariablesSectionMarkdown(context, markdownLines);
+        var catalogUiPoliciesSection = [];
+        var uiPolicies = pushCatalogUiPoliciesSection('variable_set', varSetGr.getUniqueValue(), varMap, catalogUiPoliciesSection, context);
+        var catalogClientScriptsSection = [];
+        var clientScripts = pushCatalogClientScriptsSection('variable_set', varSetGr.getUniqueValue(), varMap, catalogClientScriptsSection, context);
 
-        pushCatalogUiPoliciesSection('variable_set', varSetGr.getUniqueValue(), varMap, markdownLines, context);
-        pushCatalogClientScriptsSection('variable_set', varSetGr.getUniqueValue(), varMap, markdownLines, context);
+        varMap.pushVariablesSectionMarkdown(context, uiPolicies, clientScripts, markdownLines);
+        if (catalogUiPoliciesSection.length > 0)
+            markdownLines = markdownLines.concat(catalogUiPoliciesSection);
+        if (catalogClientScriptsSection.length > 0)
+            markdownLines = markdownLines.concat(catalogClientScriptsSection);
 
         return markdownLines.join("\n") + "\n";
     }

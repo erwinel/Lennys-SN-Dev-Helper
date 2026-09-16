@@ -95,7 +95,6 @@ var MarkdownGenerationContext = (function () {
 
     /**
      * @param {string} text
-     * @param {boolean} [isTableCellContent]
      * @returns {string}
      */
     function minimalEscapeForTableCellMarkdown(text) {
@@ -111,7 +110,6 @@ var MarkdownGenerationContext = (function () {
 
     /**
      * @param {string} text
-     * @param {boolean} [isTableCellContent]
      * @returns {string}
      */
     function escapeForMarkdownStartOfLine(text) {
@@ -147,7 +145,6 @@ var MarkdownGenerationContext = (function () {
 
     /**
      * @param {string} text
-     * @param {boolean} [isTableCellContent]
      * @returns {string}
      */
     function convertToHeadingFragment(text) {
@@ -265,7 +262,7 @@ var MarkdownGenerationContext = (function () {
             tableElement,
             fieldElement,
             markdownLines,
-            currentTable,
+            current_table,
             showEmpty
         ) {
             if (gs.nil(fieldElement)) {
@@ -275,7 +272,7 @@ var MarkdownGenerationContext = (function () {
                             escapeForMarkdown(fieldElement.getLabel()) +
                             ':** *Empty*'
                     );
-            } else if (('' + tableElement) == currentTable)
+            } else if (('' + tableElement) == current_table)
                 markdownLines.push(
                     '- **' +
                         escapeForMarkdown(fieldElement.getLabel()) +
@@ -531,32 +528,27 @@ var MarkdownGenerationContext = (function () {
         },
 
         pushListItemIfTrue: function (glideElement, markdownLines) {
-            if (
-                !gs.nil(glideElement) &&
-                glideElement.getDisplayValue() == 'true'
-            )
+            if (!gs.nil(glideElement)) {
+                if (glideElement.getDisplayValue() != 'true')
+                    return false;
                 markdownLines.push(
                     '- **' +
                         escapeForMarkdown(glideElement.getLabel()) +
                         ':** True'
                 );
+                return true;
+            }
         },
 
-        pushListItemIfFalse: function (
-            glideElement,
-            markdownLines,
-            nilIsFalse
-        ) {
-            if (
-                gs.nil(glideElement)
-                    ? nilIsFalse
-                    : glideElement.getDisplayValue() == 'false'
-            )
-                markdownLines.push(
-                    '- **' +
-                        escapeForMarkdown(glideElement.getLabel()) +
-                        ':** False'
-                );
+        pushListItemIfFalse: function (glideElement, markdownLines, nilIsFalse) {
+            if (!gs.nil(glideElement)) {
+                if (glideElement.getDisplayValue() == 'true')
+                    return true;
+                markdownLines.push('- **' + escapeForMarkdown(glideElement.getLabel()) + ':** False');
+                return false;
+            }
+            if (nilIsFalse)
+                markdownLines.push('- **' + escapeForMarkdown(glideElement.getLabel()) + ':** False');
         },
 
         pushImageListItem: function (glideElement, markdownLines, showEmpty) {

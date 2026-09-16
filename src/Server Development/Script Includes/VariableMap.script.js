@@ -3,7 +3,7 @@ var VariableMap = (function() {
 
     var idRe = /IO:([a-f\d]{32})/g;
     var encodedRe = /^([^^]+(?:\^(?!NQ)[^^]+)*)\^NQ ?/g;
-    
+
     VariableMapConstructor.prototype = {
         _parent_sys_id: '',
 
@@ -118,9 +118,11 @@ var VariableMap = (function() {
 
         /**
          * @param {MarkdownGenerationContext} context
+         * @param {UIPolicyInfo[]} uiPolicies
+         * @param {ClientScriptInfo[]} clientScripts
          * @param {string[]} markdownLines
          */
-        pushVariablesSectionMarkdown: function(context, markdownLines) {
+        pushVariablesSectionMarkdown: function(context, uiPolicies, clientScripts, markdownLines) {
             if (this._allVariables.length < 1)
                 return;
 
@@ -133,48 +135,62 @@ var VariableMap = (function() {
                     '',
                     '## Variables',
                     '',
-                    '| Type | Question | Field | Order |',
-                    '| ---- | -------- | ----- | ----- |'
+                    '| Type | Question | Name | Field | Order |',
+                    '| ---- | -------- | ---- | ----- | ----- |'
                 );
                 for (i = 0; i < this._allVariables.length; i++) {
                     item = this._allVariables[i];
                     type = item.type_label;
                     question_text = item.question_text ? item.question_text : item.name;
-                    linkTxt = '[' + MarkdownGenerationContext.escapeForTableCellMarkdown(question_text) + (item.set_map ? '](#variable-set-' : '](#variable-') + MarkdownGenerationContext.convertToHeadingFragment(question_text) + ')';
-                    if (!item.set_map)
+                    if (item.set_map)
+                        linkTxt = '[' + question_text + '](#variable-set-' + MarkdownGenerationContext.convertToHeadingFragment(question_text) + ')';
+                    else
                         switch (item.type_value) {
                             case 19: // Container Start
-                            case 24: // Container Split
-                            case 20: // Container End
-                                linkTxt = '*' + linkTxt + '*';
+                                linkTxt = '*[' + question_text + '](#variable-' + MarkdownGenerationContext.convertToHeadingFragment(question_text) + ')*';
                                 type = '*\\(' + type + '\\)*';
                                 break;
+                            case 24: // Container Split
+                            case 20: // Container End
+                                linkTxt = '*[' + question_text + '](#variable-' + MarkdownGenerationContext.convertToHeadingFragment(item.name) + ')*';
+                                type = '*\\(' + type + '\\)*';
+                                break;
+                            default:
+                                linkTxt = '[' + question_text + '](#variable-' + MarkdownGenerationContext.convertToHeadingFragment(question_text) + ')';
+                                break;
                         }
-                    markdownLines.push('| ' + type + ' | ' + linkTxt + ' | ' + (item.field ? item.field.display_value + ' | ' : '| ') + item.order.display_value + ' |');
+                    markdownLines.push('| ' + type + ' | ' + linkTxt + ' | `' + item.name + '` | ' + (item.field ? item.field.display_value + ' | ' : '| ') + item.order.display_value + ' |');
                 }
             } else {
                 markdownLines.push(
                     '',
                     '## Variables',
                     '',
-                    '| Type | Question | Order |',
-                    '| ---- | -------- | ----- |'
+                    '| Type | Question | Name | Order |',
+                    '| ---- | -------- | ---- | ----- |'
                 );
                 for (i = 0; i < this._allVariables.length; i++) {
                     item = this._allVariables[i];
                     type = item.type_label;
                     question_text = item.question_text ? item.question_text : item.name;
-                    linkTxt = '[' + MarkdownGenerationContext.escapeForTableCellMarkdown(question_text) + (item.set_map ? '](#variable-set-' : '](#variable-') + MarkdownGenerationContext.convertToHeadingFragment(question_text) + ')';
-                    if (!item.set_map)
+                    if (item.set_map)
+                        linkTxt = '[' + question_text + '](#variable-set-' + MarkdownGenerationContext.convertToHeadingFragment(question_text) + ')';
+                    else
                         switch (item.type_value) {
                             case 19: // Container Start
-                            case 24: // Container Split
-                            case 20: // Container End
-                            linkTxt = '*' + linkTxt + '*';
+                                linkTxt = '*[' + question_text + '](#variable-' + MarkdownGenerationContext.convertToHeadingFragment(question_text) + ')*';
                                 type = '*\\(' + type + '\\)*';
                                 break;
+                            case 24: // Container Split
+                            case 20: // Container End
+                                linkTxt = '*[' + question_text + '](#variable-' + MarkdownGenerationContext.convertToHeadingFragment(item.name) + ')*';
+                                type = '*\\(' + type + '\\)*';
+                                break;
+                            default:
+                                linkTxt = '[' + question_text + '](#variable-' + MarkdownGenerationContext.convertToHeadingFragment(question_text) + ')';
+                                break;
                         }
-                    markdownLines.push('| ' + type + ' | ' + linkTxt + ' | ' + item.order.display_value + ' |');
+                    markdownLines.push('| ' + type + ' | ' + linkTxt + ' | `' + item.name + '` | ' + item.order.display_value + ' |');
                 }
             }
             for (i = 0; i < this._allVariables.length; i++) {
@@ -409,6 +425,69 @@ var VariableMap = (function() {
                             } while (choiceGr.next());
                         }
                     }
+
+                    var n;
+                    /** @type {({ action: UIPolicyActionInfo; policy: UIPolicyInfo; }[])} */
+                    var policiesForThisVar = [];
+                    for (n = 0; n < uiPolicies.length; n++) {
+                        var policy = uiPolicies[n];
+                        for (var p = 0; p < policy.actions.length; p++) {
+                            var a = policy.actions[p];
+                            if (a.variable == item.name)
+                                policiesForThisVar.push({
+                                    action: a,
+                                    policy: policy
+                                });
+                        }
+                    }
+                    if (policiesForThisVar.length > 0) {
+                        markdownLines.push(
+                            '',
+                            '**UI Policies:**',
+                            '',
+                            '| Applies on catalog items | Applies to catalog tasks | Applies to requested items | Mandatory | Visible | Hidden | Value action | Policy |',
+                            '| ------------------------ | ------------------------ | -------------------------- | --------- | ------- | ------ | ------------ | ------ |'
+                        );
+                        if (policiesForThisVar.length > 0)
+                            policiesForThisVar.sort(function(a, b) {
+                                if (a.action.order) {
+                                    if (!b.action.order)
+                                        return 1;
+                                    return a.action.order.value - b.action.order;
+                                }
+                                return b.action.order ? -1 : 0;
+                            });
+                        for (n = 0; n < policiesForThisVar.length; n++) {
+                            var pa = policiesForThisVar[n];
+                            markdownLines.push('| ' + (pa.policy.applies_catalog ? 'True' : 'False') + ' | ' + (pa.policy.applies_sc_task ? 'True' : 'False') + ' | ' + (pa.policy.applies_req_item ? 'True' : 'False') +
+                                ' | ' + pa.action.mandatory + ' | ' + pa.action.visible + ' | ' + pa.action.disabled + ' | ' + pa.action.value_action +
+                                ' | [' + pa.policy.short_description + '](#' + pa.policy.fragment + ') |');
+                        }
+                    }
+                    var scriptsForThisVar = clientScripts.filter(
+                        /**
+                         * @param {ClientScriptInfo} cs 
+                         * @this {QuestionItem}
+                         */
+                        function(cs) {
+                            return cs.variable == this.name;
+                        }, item
+                    );
+                    if (scriptsForThisVar.length > 0) {
+                        markdownLines.push(
+                            '',
+                            '**Catalog Client Scripts:**',
+                            '',
+                            '| Catalog Client Script | Applies on catalog items | Applies to catalog tasks | Applies to requested items |',
+                            '| --------------------- | ------------------------ | ------------------------ | -------------------------- |'
+                        );
+                        for (n = 0; n < scriptsForThisVar.length; n++) {
+                            /** @type {ClientScriptInfo} */
+                            var scr = scriptsForThisVar[n];
+                            markdownLines.push('| [' + scr.name + '](#' + scr.fragment + ') | ' + (scr.applies_catalog ? 'True' : 'False') + ' | ' + (scr.applies_sc_task ? 'True' : 'False') + ' | ' + (scr.applies_req_item ? 'True' : 'False') +
+                                ' |');
+                        }
+                    }
                 }
             }
         },
@@ -423,7 +502,7 @@ var VariableMap = (function() {
                 conditionString = '' + conditionString;
             if (conditionString == '')
                 return '';
-            
+
             var current_folder = context.getCurrentFolder();
             var match = idRe.exec(conditionString);
             var decoded = '';
@@ -440,8 +519,7 @@ var VariableMap = (function() {
                         var link = (item.parent_type == "variable_set") ? context.mapper.getVarSetUrl(item.parent_sys_id, current_folder) : context.mapper.getCatItemUrl(item.parent_sys_id, current_folder);
                         decoded += '[' + MarkdownGenerationContext.escapeForMarkdown(question_text) + (item.set_map ? '](' + link + '#variable-set-' : '](' + link + '#variable-') + MarkdownGenerationContext.convertToHeadingFragment(question_text) + ')';
                     }
-                }
-                else
+                } else
                     decoded += match[0];
                 startIndex = idRe.lastIndex;
                 match = idRe.exec(conditionString);
@@ -449,7 +527,7 @@ var VariableMap = (function() {
             if (startIndex < conditionString.length)
                 decoded += conditionString.substring(startIndex);
             decoded = decoded.trim();
-            
+
             var iml = encodedRe.test(decoded);
             if (iml) {
                 decoded = decoded.replace(encodedRe, "\n  - $1^EQ\n  - *OR:* ");
@@ -625,21 +703,21 @@ var VariableMap = (function() {
             var container_name = '';
             for (var i = 0; i < this._allVariables.length; i++) {
                 item = this._allVariables[i];
-                    switch (item.type_value) {
-                        case 19: // Container Start
-                            container_name = item.question_text;
-                            break;
-                        case 24: // Container Split
-                            if (container_name)
-                                item.question_text = container_name;
-                            break;
-                        case 20: // Container End
-                            if (container_name) {
-                                item.question_text = container_name;
-                                container_name = '';
-                            }
-                            break;
-                    }
+                switch (item.type_value) {
+                    case 19: // Container Start
+                        container_name = item.question_text;
+                        break;
+                    case 24: // Container Split
+                        if (container_name)
+                            item.question_text = container_name;
+                        break;
+                    case 20: // Container End
+                        if (container_name) {
+                            item.question_text = container_name;
+                            container_name = '';
+                        }
+                        break;
+                }
             }
         },
 

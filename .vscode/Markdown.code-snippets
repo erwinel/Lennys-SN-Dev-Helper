@@ -1,0 +1,27 @@
+{
+    "Pre/Code Tags": {
+        "scope": "markdown",
+        "prefix": "pre-code-tags",
+        "body": "<pre><code>${TM_SELECTED_TEXT}</pre></code>"
+    },
+    "Span Tag with Red Color": {
+        "scope": "markdown",
+        "prefix": "span-tag-red",
+        "body": "<span style=\"color:red\">${TM_SELECTED_TEXT}</span>"
+    },
+    "Span Tag with Green Color": {
+        "scope": "markdown",
+        "prefix": "span-tag-green",
+        "body": "<span style=\"color:green\">${TM_SELECTED_TEXT}</span>"
+    },
+    "Span Tag with Yellow Color": {
+        "scope": "markdown",
+        "prefix": "span-tag-yellow",
+        "body": "<span style=\"color:yellow\">${TM_SELECTED_TEXT}</span>"
+    },
+    "Paste Into Pre/Code Tags": {
+        "scope": "markdown",
+        "prefix": "paste-into-pre-code-tags",
+        "body": "<pre><code>${CLIPBOARD}</pre></code>"
+    }
+}
