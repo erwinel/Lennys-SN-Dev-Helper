@@ -69,7 +69,7 @@ declare interface MarkdownGenerationContextConstructor {
 
     convertToHeadingFragment(text: string): string;
 
-        convertToFileName(text: string): string;
+    convertToFileName(text: string): string;
 
     normalizeWhiteSpace(text: string): string;
 
@@ -194,37 +194,6 @@ declare type VarSetMarkdownMapping = MarkdownMapping & {
     internal_name: string;
 }
 
-declare interface ReferenceLinkMapperConstructor {
-    new(): ReferenceLinkMapper;
-}
-
-declare interface ReferenceLinkMapper {
-    getActionMapping(action: GlideRecord | GlideRecordSecure | GlideElement | string): FlowMarkdownMapping | undefined;
-    getCatItemMapping(cat_item: GlideRecord | GlideRecordSecure | GlideElement | string): MarkdownMapping | undefined;
-    getFlowMapping(flow: GlideRecord | GlideRecordSecure | GlideElement | string): FlowMarkdownMapping | undefined;
-    getTableMapping(table: GlideRecord | GlideRecordSecure | GlideElement | string): TableMarkdownMapping | undefined;
-    getVarSetMapping(varSet: GlideRecord | GlideRecordSecure | GlideElement | string): VarSetMarkdownMapping | undefined;
-    getActionUrl(action: GlideRecord | GlideRecordSecure | GlideElement | string, current_folder?: string): string | undefined;
-    getCatItemUrl(cat_item: GlideRecord | GlideRecordSecure | GlideElement | string, current_folder?: string): string | undefined;
-    getFlowUrl(flow: GlideRecord | GlideRecordSecure | GlideElement | string, current_folder?: string): string | undefined;
-    getTableUrl(table: GlideRecord | GlideRecordSecure | GlideElement | string, current_folder?: string): string | undefined;
-    getVarSetUrl(varSet: GlideRecord | GlideRecordSecure | GlideElement | string, current_folder?: string): string | undefined;
-    getActionMdLink(action: GlideRecord | GlideRecordSecure | GlideElement | string, current_folder?: string, isForTableCell?: boolean): string | undefined;
-    getCatItemMdLink(cat_item: GlideRecord | GlideRecordSecure | GlideElement | string, current_folder?: string, isForTableCell?: boolean): string | undefined;
-    getFlowMdLink(flow: GlideRecord | GlideRecordSecure | GlideElement | string, current_folder?: string, isForTableCell?: boolean): string | undefined;
-    getTableMdLink(table: GlideRecord | GlideRecordSecure | GlideElement | string, current_folder?: string, isForTableCell?: boolean): string | undefined;
-    getColumnMdLink(table: GlideRecord | GlideRecordSecure | GlideElement | string, field: GlideElement | string, current_folder?: string, isForTableCell?: boolean): string | undefined;
-    getVarSetMdLink(variable_set: GlideRecord | GlideRecordSecure | GlideElement | string, current_folder?: string, isForTableCell?: boolean): string | undefined;
-
-    type: 'ReferenceLinkMapper';
-}
-
-declare var ReferenceLinkMapper: ReferenceLinkMapperConstructor;
-
-declare interface ServiceCatalogMarkdownGenerator {
-    type: 'ServiceCatalogMarkdownGenerator';
-}
-
 declare type TrueFalseOrLeaveAlone = "True" | "False" | "Leave alone";
 
 declare interface UIPolicyActionInfo {
@@ -262,8 +231,119 @@ declare interface ClientScriptInfo {
     order?: ValueAndDisplay<number>;
 }
 
+declare interface SplitPathComponents {
+    parent?: string;
+    leaf: string;
+}
+
+declare interface SplitFileNameComponents {
+    base_name: string;
+    extension?: string;
+}
+
+declare interface ReferenceLinkMapperConstructor {
+    getPathSegments(path: string): string[];
+    normalizePath(path: string): string;
+    splitPath(path: string): SplitPathComponents;
+    getParentPath(path: string): string;
+    getPathLeaf(path: string): string;
+    splitFileNameAndExtension(fileName: string): SplitFileNameComponents;
+    getFileBaseName(fileName: string): string;
+    getFileExtension(fileName: string): string;
+    convertToRelativePath(pathFrom: string, pathTo: string): string;
+    new(): ReferenceLinkMapper;
+}
+
+declare interface ReferenceLinkMapper {
+    getActionMapping(action: GlideRecord | GlideRecordSecure | GlideElement | string): FlowMarkdownMapping | undefined;
+    getCatItemMapping(cat_item: GlideRecord | GlideRecordSecure | GlideElement | string): MarkdownMapping | undefined;
+    getFlowMapping(flow: GlideRecord | GlideRecordSecure | GlideElement | string): FlowMarkdownMapping | undefined;
+    getTableMapping(table: GlideRecord | GlideRecordSecure | GlideElement | string): TableMarkdownMapping | undefined;
+    getVarSetMapping(varSet: GlideRecord | GlideRecordSecure | GlideElement | string): VarSetMarkdownMapping | undefined;
+    getActionUrl(action: GlideRecord | GlideRecordSecure | GlideElement | string, current_folder?: string): string | undefined;
+    getCatItemUrl(cat_item: GlideRecord | GlideRecordSecure | GlideElement | string, current_folder?: string): string | undefined;
+    getFlowUrl(flow: GlideRecord | GlideRecordSecure | GlideElement | string, current_folder?: string): string | undefined;
+    getTableUrl(table: GlideRecord | GlideRecordSecure | GlideElement | string, current_folder?: string): string | undefined;
+    getVarSetUrl(varSet: GlideRecord | GlideRecordSecure | GlideElement | string, current_folder?: string): string | undefined;
+    getActionMdLink(action: GlideRecord | GlideRecordSecure | GlideElement | string, current_folder?: string, isForTableCell?: boolean): string | undefined;
+    getCatItemMdLink(cat_item: GlideRecord | GlideRecordSecure | GlideElement | string, current_folder?: string, isForTableCell?: boolean): string | undefined;
+    getFlowMdLink(flow: GlideRecord | GlideRecordSecure | GlideElement | string, current_folder?: string, isForTableCell?: boolean): string | undefined;
+    getTableMdLink(table: GlideRecord | GlideRecordSecure | GlideElement | string, current_folder?: string, isForTableCell?: boolean): string | undefined;
+    getColumnMdLink(table: GlideRecord | GlideRecordSecure | GlideElement | string, field: GlideElement | string, current_folder?: string, isForTableCell?: boolean): string | undefined;
+    getVarSetMdLink(variable_set: GlideRecord | GlideRecordSecure | GlideElement | string, current_folder?: string, isForTableCell?: boolean): string | undefined;
+
+    type: 'ReferenceLinkMapper';
+}
+
+declare var ReferenceLinkMapper: ReferenceLinkMapperConstructor;
+
+declare interface GenerateAttachmentSuccessResult {
+    success: true;
+    /** The file name of the attachment */
+    file_name: string;
+
+    /** The unique identifier of the attachment */
+    sys_id: string;
+}
+declare interface GenerateAttachmentFailureResult {
+    success?: false;
+
+    /** The errpr message */
+    message: string;
+}
+
+declare type GenerateAttachmentResult = GenerateAttachmentSuccessResult | GenerateAttachmentFailureResult;
+
 declare interface ServiceCatalogMarkdownGeneratorConstructor {
-    new(): ServiceCatalogMarkdownGenerator;
+    /**
+     * Generates markdown from a Record Producer.
+     *
+     * @param {(GlideRecord | GlideRecordSecure)} catItemGr - The Record Producer [sc_cat_item_producer] record to create the markdown for.
+     * @param {MarkdownGenerationContext} context - The context object for markdown generation.
+     * @return {string} The generated markdown
+     * @memberof ServiceCatalogMarkdownGeneratorConstructor
+     */
+    getRecordProducerMarkdown(catItemGr: GlideRecord | GlideRecordSecure, context: MarkdownGenerationContext): string;
+
+    /**
+     * Generates markdown from a Catalog Item.
+     *
+     * @param {(GlideRecord | GlideRecordSecure)} catItemGr - The Catalog Item [sc_cat_item] record to create the markdown for.
+     * @param {MarkdownGenerationContext} context - The context object for markdown generation.
+     * @return {string} The generated markdown
+     * @memberof ServiceCatalogMarkdownGeneratorConstructor
+     */
+    getCatalogItemMarkdown(catItemGr: GlideRecord | GlideRecordSecure, context: MarkdownGenerationContext): string;
+
+    /**
+     * Generates markdown from a Variable Set.
+     *
+     * @param {(GlideRecord | GlideRecordSecure)} varSetGr - The Variable Set [item_option_new_set] record to create the markdown for.
+     * @param {MarkdownGenerationContext} context - The context object for markdown generation.
+     * @return {string} The generated markdown
+     * @memberof ServiceCatalogMarkdownGeneratorConstructor
+     */
+    getVariableSetMarkdown(varSetGr: GlideRecord | GlideRecordSecure, context: MarkdownGenerationContext): string;
+
+    /**
+     * Attaches a markdown document file containing Catalog Item details to the current user's record so it can be downloaded.
+     *
+     * @param {(GlideRecord | GlideRecordSecure)} catItemGr - The Catalog Item [sc_cat_item] record to create the markdown for.
+     * @param {string} [current_folder] - The optional current folder for relative link context.
+     * @return {GenerateAttachmentResult}
+     * @memberof ServiceCatalogMarkdownGeneratorConstructor
+     */
+    attachCatalogItemMarkdown(catItemGr: GlideRecord | GlideRecordSecure, current_folder?: string): GenerateAttachmentResult;
+
+    /**
+     * Attaches a markdown document file containing Variable Set details to the current user's record so it can be downloaded.
+     *
+     * @param {(GlideRecord | GlideRecordSecure)} varSetGr - The Variable Set [item_option_new_set] record to create the markdown attachment for.
+     * @param {string} [current_folder] - The optional current folder for relative link context.
+     * @return {GenerateAttachmentResult}
+     * @memberof ServiceCatalogMarkdownGeneratorConstructor
+     */
+    attachVariableSetMarkdown(varSetGr: GlideRecord | GlideRecordSecure, current_folder?: string): GenerateAttachmentResult;
 }
 
 declare var ServiceCatalogMarkdownGenerator: ServiceCatalogMarkdownGeneratorConstructor;
