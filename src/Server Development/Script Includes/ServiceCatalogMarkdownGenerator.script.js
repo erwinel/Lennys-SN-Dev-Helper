@@ -38,6 +38,7 @@ var ServiceCatalogMarkdownGenerator = (function() {
     }
 
     var emptyFuncRe = /^[\r\n\s]*function\s+\w+\s*\(\s*\)[\r\n\s]*\{[\r\n\s]*\}[\r\n\s]*$/g;
+    var scriptCallRe = /g_form\.(?:(set(?:Value|Display|Mandatory|ReadOnly))\((?:'([^']+)'|"([^"]+")),[^)]+|clearValue\((?:'([^']+)'|"([^"]+")))\)/g;
 
     /**
      * @param {string} filterField
@@ -64,7 +65,7 @@ var ServiceCatalogMarkdownGenerator = (function() {
             /** @type {UIPolicyInfo} */
             var uiPolicyInfo = {
                 sys_id: policyGr.getUniqueValue(),
-                short_description: MarkdownGenerationContext.escapeForMarkdown(policyGr.getValue('short_description')),
+                short_description: policyGr.getValue('short_description'),
                 actions: []
             };
             uiPolicyInfo.fragment = 'ui-policy-' + MarkdownGenerationContext.convertToHeadingFragment(uiPolicyInfo.short_description);
@@ -73,7 +74,7 @@ var ServiceCatalogMarkdownGenerator = (function() {
                     display_value: policyGr.getDisplayValue('order'),
                     value: parseInt(policyGr.getValue('order'))
                 };
-            markdownLines.push('', '### UI Policy: ' + uiPolicyInfo.short_description, '');
+            markdownLines.push('', '### UI Policy: ' + MarkdownGenerationContext.minimalEscapeForMarkdown(uiPolicyInfo.short_description), '');
             /** @type {tyLabeledMultilineStackItem[]} */
             var multiLineStack = [];
             /** @type {(QuestionItem | undefined)} */
@@ -169,8 +170,8 @@ var ServiceCatalogMarkdownGenerator = (function() {
                                 break;
                         }
                     markdownLines.push(lineText + actionInfo.value_action + " |");
+                    uiPolicyInfo.actions.push(actionInfo);
                 } while (actionGr.next());
-                uiPolicyInfo.actions.push(actionInfo);
             }
 
             results.push(uiPolicyInfo);
@@ -218,7 +219,8 @@ var ServiceCatalogMarkdownGenerator = (function() {
             /** @type {ClientScriptInfo} */
             var clientScriptInfo = {
                 sys_id: scriptGr.getUniqueValue(),
-                name: MarkdownGenerationContext.minimalEscapeForMarkdown(scriptGr.getValue('name'))
+                name: MarkdownGenerationContext.minimalEscapeForMarkdown(scriptGr.getValue('name')),
+                calls: []
             };
             clientScriptInfo.fragment = 'client-script-' + MarkdownGenerationContext.convertToHeadingFragment(clientScriptInfo.name);
             if (!gs.nil(scriptGr.order))
@@ -228,7 +230,7 @@ var ServiceCatalogMarkdownGenerator = (function() {
                 };
             /** @type {tyLabeledMultilineStackItem[]} */
             var multiLineStack = [];
-            markdownLines.push('', '### Client Script: ' + clientScriptInfo.name, '');
+            markdownLines.push('', '### Client Script: ' + MarkdownGenerationContext.minimalEscapeForMarkdown(clientScriptInfo.name), '');
             context.pushDisplayValueListItem(scriptGr.applies_to, markdownLines, multiLineStack);
             context.pushDisplayValueListItem(scriptGr.ui_type, markdownLines, multiLineStack);
             context.pushDisplayValueListItem(scriptGr.type, markdownLines, multiLineStack);
@@ -256,8 +258,39 @@ var ServiceCatalogMarkdownGenerator = (function() {
             context.pushMultiLineItems(multiLineStack, markdownLines);
             if (!gs.nil(scriptGr.description))
                 markdownLines.push('', "**Description:**", '', '```text', scriptGr.getValue('description'), '```');
-            if (!gs.nil(scriptGr.script))
+            if (!gs.nil(scriptGr.script)) {
+                var script = scriptGr.getValue('script');
                 markdownLines.push('', "**Script:**", '', '```javascript', scriptGr.getValue('script'), '```');
+                var m = scriptCallRe.exec(script);
+                if (m !== null) {
+                    clientScriptInfo.calls = {};
+                    var vn, mn;
+                    if (m[1]) {
+                        mn = m[1];
+                        vn = m[2] ? m[2] : m[3];
+                    } else {
+                        mn = 'clearValue';
+                        vn = m[4] ? m[4] : m[5];
+                    }
+                    clientScriptInfo.calls[vn] = [mn];
+                    m = scriptCallRe.exec(script);
+                    while (m !== null) {
+                        if (m[1]) {
+                            mn = m[1];
+                            vn = m[2] ? m[2] : m[3];
+                        } else {
+                            mn = 'clearValue';
+                            vn = m[4] ? m[4] : m[45];
+                        }
+                        var arr = clientScriptInfo.calls[vn];
+                        if (typeof arr === 'undefined')
+                            clientScriptInfo.calls[vn] = [mn];
+                        else if (arr.indexOf(mn) < 0)
+                            arr.push(mn);
+                        m = scriptCallRe.exec(script);
+                    }
+                }
+            }
         }
         return results;
     }
@@ -423,7 +456,215 @@ var ServiceCatalogMarkdownGenerator = (function() {
 
     ServiceCatalogMarkdownGeneratorConstructor.getVariableSetMarkdown = getVariableSetMarkdown;
 
+    /**
+     * Attaches a markdown document file to the current user's record so it can be downloaded.
+     * 
+     * @param {GlideRecord} catItemGr - The Catalog Item [sc_cat_item] record to create the markdown for.
+     * @param {string} [current_folder] - The optional current folder for relative links.
+     * @returns {GenerateAttachmentResult}
+     */
+    function attachCatalogItemMarkdown(catItemGr, current_folder) {
+        var markdownContent, fileName;
+        try {
+            var context = new MarkdownGenerationContext();
+            var mapping = context.mapper.getCatItemMapping(catItemGr);
+            if (mapping) {
+                if (!ReferenceLinkMapper.isWebLink(mapping.file_link))
+                    fileName = mapping.file_link;
+                if (typeof current_folder === 'string')
+                    context.setCurrentFolder(current_folder);
+                else if (typeof mapping.folder === 'string')
+                    context.setCurrentFolder(mapping.folder);
+            } else if (typeof current_folder === 'string')
+                context.setCurrentFolder(current_folder);
+            markdownContent = (sys_class_name == 'sc_cat_item_producer') ? getRecordProducerMarkdown(catItemGr, context) : getCatalogItemMarkdown(catItemGr, context);
+        } catch (e) {
+            return {
+                success: false,
+                message: 'An unexpected exception has occurred while generating markdown: ' + (e.stack ? e + "\n\nStack:\n" + e.stack : e)
+            };
+        }
+
+        try {
+            if (fileName) {
+                fileName = ReferenceLinkMapper.getPathLeaf(fileName);
+                var nameAndExtension = ReferenceLinkMapper.splitFileNameAndExtension(fileName);
+                if (nameAndExtension.extension !== '.md')
+                    fileName = nameAndExtension.base_name + '.md';
+            } else
+                fileName = MarkdownGenerationContext.convertToFileName(catItemGr.getDisplayValue()) + '-Catalog-Item.md';
+                
+            var userSysId = gs.getUserID();
+            var attachment = new GlideSysAttachment();        
+            var attachmentGR = attachment.getAttachments('sys_user', userSysId);
+            if (attachmentGR.next()) {
+                var fnLower = fileName.toLowerCase();
+                do {
+                    if (attachmentGR.getValue('file_name').toLowerCase() == fnLower) {
+                        attachment.deleteAttachment(attachmentGR.getUniqueValue());
+                        break;
+                    }
+                } while (attachmentGR.next());
+            }
+            var userGr = new GlideRecord('sys_user');
+            userGr.get(userSysId);
+            var sys_id = attachment.write(userGr, fileName, 'text/x-web-markdown', markdownContent);
+            if (sys_id)
+                return {
+                    success: true,
+                    file_name: fileName,
+                    sys_id : sys_id
+                };
+        } catch (e) {
+            return {
+                success: false,
+                message: 'An unexpected exception has occurred while generating the attachment: ' + (e.stack ? e + "\n\nStack:\n" + e.stack : e)
+            };
+        }
+        return {
+            success: false,
+            message: 'GlideSysAttachment.write returned nil'
+        };
+    }
+
+    ServiceCatalogMarkdownGeneratorConstructor.attachCatalogItemMarkdown = attachCatalogItemMarkdown;
+
+    /**
+     * Attaches a markdown document file to the current user's record so it can be downloaded.
+     * 
+     * @param {GlideRecord} varSetGr - The Variable Set [sc_cat_item] record to create the markdown for.
+     * @param {string} [current_folder] - The optional current folder for relative links.
+     * @returns {GenerateAttachmentResult}
+     */
+    function attachVariableSetMarkdown(varSetGr, current_folder) {
+        var markdownContent, fileName;
+        try {
+            var context = new MarkdownGenerationContext();
+            var mapping = context.mapper.getCatItemMapping(varSetGr);
+            if (mapping) {
+                if (!ReferenceLinkMapper.isWebLink(mapping.file_link))
+                    fileName = mapping.file_link;
+                if (typeof current_folder === 'string')
+                    context.setCurrentFolder(current_folder);
+                else if (typeof mapping.folder === 'string')
+                    context.setCurrentFolder(mapping.folder);
+            } else if (typeof current_folder === 'string')
+                context.setCurrentFolder(current_folder);
+            markdownContent = getVariableSetMarkdown(varSetGr, context);
+        } catch (e) {
+            return {
+                success: false,
+                message: 'An unexpected exception has occurred while generating markdown: ' + (e.stack ? e + "\n\nStack:\n" + e.stack : e)
+            };
+        }
+
+        try {
+            if (fileName) {
+                fileName = ReferenceLinkMapper.getPathLeaf(fileName);
+                var nameAndExtension = ReferenceLinkMapper.splitFileNameAndExtension(fileName);
+                if (nameAndExtension.extension !== '.md')
+                    fileName = nameAndExtension.base_name + '.md';
+            } else
+                fileName = MarkdownGenerationContext.convertToFileName(varSetGr.getDisplayValue()) + '-Variable-Set.md';
+                
+            var userSysId = gs.getUserID();
+            var attachment = new GlideSysAttachment();        
+            var attachmentGR = attachment.getAttachments('sys_user', userSysId);
+            if (attachmentGR.next()) {
+                var fnLower = fileName.toLowerCase();
+                do {
+                    if (attachmentGR.getValue('file_name').toLowerCase() == fnLower) {
+                        attachment.deleteAttachment(attachmentGR.getUniqueValue());
+                        break;
+                    }
+                } while (attachmentGR.next());
+            }
+
+            var userGr = new GlideRecord('sys_user');
+            userGr.get(userSysId);
+            var sys_id = attachment.write(userGr, fileName, 'text/x-web-markdown', markdownContent);
+            if (sys_id)
+                return {
+                    success: true,
+                    file_name: fileName,
+                    sys_id : sys_id
+                };
+        } catch (e) {
+            return {
+                success: false,
+                message: 'An unexpected exception has occurred while generating the attachment: ' + (e.stack ? e + "\n\nStack:\n" + e.stack : e)
+            };
+        }
+        return {
+            success: false,
+            message: 'GlideSysAttachment.write returned nil'
+        };
+    }
+
+    ServiceCatalogMarkdownGeneratorConstructor.attachVariableSetMarkdown = attachVariableSetMarkdown;
+
     ServiceCatalogMarkdownGeneratorConstructor.prototype = Object.extendsObject(global.AbstractAjaxProcessor, {
+        attachCatalogItemMarkdown: function() {
+            var sys_id = this.getParameter('sysparm_sys_id');
+            if (!sys_id)
+                return JSON.stringify({
+                    success: false,
+                    message: "Value for sys_id parameter not provided."
+                });
+            var catItemGr, folder;
+            try {
+                catItemGr = new GlideRecord('sc_cat_item');
+                if (!catItemGr.get(sys_id))
+                    return JSON.stringify({
+                        success: false,
+                        message: "Catalog Item with sys_id " + JSON.stringify(sys_id) + " not found."
+                    });
+                sys_class_name = catItemGr.getValue('sys_class_name');
+                if (sys_class_name == 'sc_cat_item_producer') {
+                    catItemGr = new GlideRecord('sc_cat_item_producer');
+                    if (!catItemGr.get(sys_id))
+                        return JSON.stringify({
+                            success: false,
+                            message: "Record Producer with sys_id " + JSON.stringify(sys_id) + " not found."
+                        });
+                }
+                folder = this.getParameter('sysparm_folder');
+            } catch (e) {
+                return JSON.stringify({
+                    success: false,
+                    message: "Error loading catalog item with sys_id " + JSON.stringify(sys_id) + ": " + (e.stack ? e + "\n\nStack:\n" + e.stack : e)
+                });
+            }
+ 
+            return JSON.stringify((folder && folder != '') ? attachCatalogItemMarkdown(catItemGr, folder) : attachCatalogItemMarkdown(catItemGr));
+        },
+
+        attachVariableSetMarkdown: function() {
+            var sys_id = this.getParameter('sysparm_sys_id');
+            if (!sys_id)
+                return JSON.stringify({
+                    success: false,
+                    message: "Value for sys_id parameter not provided."
+                });
+            var varSetGr, folder;
+            try {
+                varSetGr = new GlideRecord('item_option_new_set');
+                if (!varSetGr.get(sys_id))
+                    return JSON.stringify({
+                        success: false,
+                        message: "Variable Set with sys_id " + JSON.stringify(sys_id) + " not found."
+                    });
+                folder = this.getParameter('sysparm_folder');
+            } catch (e) {
+                return JSON.stringify({
+                    success: false,
+                    message: "Error loading variable set with sys_id " + JSON.stringify(sys_id) + ": " + (e.stack ? e + "\n\nStack:\n" + e.stack : e)
+                });
+            }
+ 
+            return JSON.stringify((folder && folder != '') ? attachVariableSetMarkdown(varSetGr, folder) : attachVariableSetMarkdown(varSetGr));
+        },
+
         getCatalogItemMarkdown: function() {
             try {
                 var sys_id = this.getParameter('sysparm_sys_id');

@@ -215,7 +215,7 @@ var VariableMap = (function() {
                     variableGr.get(item.sys_id);
                     question_text = variableGr.getValue(gs.nil(variableGr.question_text) ? 'name' : 'question_text');
                     markdownLines.push('');
-                    markdownLines.push("### Variable: " + MarkdownGenerationContext.escapeForMarkdown(question_text));
+                    markdownLines.push("### Variable: " + MarkdownGenerationContext.minimalEscapeForMarkdown(question_text));
                     markdownLines.push('');
 
                     if (variableGr.getDisplayValue('map_to_field') == 'true') {
@@ -445,10 +445,10 @@ var VariableMap = (function() {
                             '',
                             '**UI Policies:**',
                             '',
-                            '| Applies on catalog items | Applies to catalog tasks | Applies to requested items | Mandatory | Visible | Hidden | Value action | Policy |',
-                            '| ------------------------ | ------------------------ | -------------------------- | --------- | ------- | ------ | ------------ | ------ |'
+                            '| Mandatory | Visible | Read only | Value action | Applies on catalog items | Applies to catalog tasks | Applies to requested items | Policy |',
+                            '| --------- | ------- | --------- | ------------ | ------------------------ | ------------------------ | -------------------------- | ------ |'
                         );
-                        if (policiesForThisVar.length > 0)
+                        if (policiesForThisVar.length > 1)
                             policiesForThisVar.sort(function(a, b) {
                                 if (a.action.order) {
                                     if (!b.action.order)
@@ -459,12 +459,38 @@ var VariableMap = (function() {
                             });
                         for (n = 0; n < policiesForThisVar.length; n++) {
                             var pa = policiesForThisVar[n];
-                            markdownLines.push('| ' + (pa.policy.applies_catalog ? 'True' : 'False') + ' | ' + (pa.policy.applies_sc_task ? 'True' : 'False') + ' | ' + (pa.policy.applies_req_item ? 'True' : 'False') +
-                                ' | ' + pa.action.mandatory + ' | ' + pa.action.visible + ' | ' + pa.action.disabled + ' | ' + pa.action.value_action +
-                                ' | [' + pa.policy.short_description + '](#' + pa.policy.fragment + ') |');
+                            markdownLines.push('| ' + pa.action.mandatory + ' | ' + pa.action.visible + ' | ' + pa.action.disabled + ' | ' + pa.action.value_action +
+                                ' | ' + (pa.policy.applies_catalog ? 'True' : 'False') + ' | ' + (pa.policy.applies_sc_task ? 'True' : 'False') + ' | ' + (pa.policy.applies_req_item ? 'True' : 'False') + ' | [' + pa.policy.short_description + '](#' + pa.policy.fragment + ') |');
                         }
                     }
                     var scriptsForThisVar = clientScripts.filter(
+                        /**
+                         * @param {ClientScriptInfo} cs 
+                         * @this {QuestionItem}
+                         */
+                        function(cs, index) {
+                            return typeof cs.calls !== 'undefined' && typeof cs.calls[this.name] !== 'undefined';
+                        }, item
+                    );
+                    /** @type {ClientScriptInfo} */
+                    var scr;
+                    if (scriptsForThisVar.length > 0) {
+                        markdownLines.push(
+                            '',
+                            '**Affected by:**',
+                            '',
+                            '| Catalog Client Script | setValue | clearValue | setDisplay | setMandatory | setReadOnly |',
+                            '| --------------------- | -------- | ---------- | ---------- | ------------ | ----------- |'
+                        );
+                        for (n = 0; n < scriptsForThisVar.length; n++) {
+                            scr = scriptsForThisVar[n];
+                            /** @type {string[]} */
+                            arr = scr.calls[item.name];
+                            markdownLines.push('| [' + scr.name + '](#' + scr.fragment + ') | ' + ((arr.indexOf('setValue') < 0) ? 'False' : 'True') + ' | ' + ((arr.indexOf('clearValue') < 0) ? 'False' : 'True') + ' | ' +
+                                ((arr.indexOf('setDisplay') < 0) ? 'False' : 'True') + ' | ' + ((arr.indexOf('setMandatory') < 0) ? 'False' : 'True') + ' | ' + ((arr.indexOf('setReadOnly') < 0) ? 'False' : 'True') + ' |');
+                        }
+                    }
+                    scriptsForThisVar = clientScripts.filter(
                         /**
                          * @param {ClientScriptInfo} cs 
                          * @this {QuestionItem}
@@ -482,8 +508,7 @@ var VariableMap = (function() {
                             '| --------------------- | ------------------------ | ------------------------ | -------------------------- |'
                         );
                         for (n = 0; n < scriptsForThisVar.length; n++) {
-                            /** @type {ClientScriptInfo} */
-                            var scr = scriptsForThisVar[n];
+                            scr = scriptsForThisVar[n];
                             markdownLines.push('| [' + scr.name + '](#' + scr.fragment + ') | ' + (scr.applies_catalog ? 'True' : 'False') + ' | ' + (scr.applies_sc_task ? 'True' : 'False') + ' | ' + (scr.applies_req_item ? 'True' : 'False') +
                                 ' |');
                         }

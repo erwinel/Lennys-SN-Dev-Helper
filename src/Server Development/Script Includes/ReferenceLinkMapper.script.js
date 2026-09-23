@@ -1,7 +1,139 @@
+/** @type {ReferenceLinkMapperConstructor} */
 var ReferenceLinkMapper = (function() {
     var instanceUri = gs.getProperty('glide.servlet.uri');
 
+    /** @type {ReferenceLinkMapperConstructor} */
     ReferenceLinkMapperConstructor = Class.create();
+
+    var pathSeparatorRe = /[\\/]/;
+
+    /**
+     * 
+     * @param {string} path 
+     * @returns {boolean}
+     */
+    function isWebLink(path) {
+        return path.indexOf(':') > -1 || path.indexOf('#') > -1 || path.indexOf('?') > -1;
+    }
+    
+    ReferenceLinkMapperConstructor.isWebLink = isWebLink;
+
+    /**
+     * @param {string} path 
+     * @returns {string[]}
+     */
+    function getPathSegments(path) {
+        var pathSegments = path.split(pathSeparatorRe);
+        for (var i = pathSegments.length - 1; i > 1; i--) {
+            if (pathSegments[i].length == 0)
+                pathSegments.splice(i, 1);
+        }
+        if (pathSegments.length == 2 && pathSegments[1].length == 0 && pathSegments[0].length > 0)
+            pathSegments.pop();
+        return pathSegments;
+    }
+
+    ReferenceLinkMapperConstructor.getPathSegments = getPathSegments;
+
+    /**
+     * @param {string} path 
+     * @returns {string}
+     */
+    function normalizePath(path) {
+        return getPathSegments(path).join('/');
+    }
+
+    ReferenceLinkMapperConstructor.normalizePath = normalizePath;
+
+    /**
+     * @param {string} path 
+     * @returns {SplitPathComponents}
+     */
+    function splitPath(path) {
+        var segments = getPathSegments(path);
+        switch (segments.length) {
+            case 1:
+                return { leaf: path };
+            case 2:
+                return (segments[1].length == 0) ? { leaf: '/' } : { parent: (segments[0].length == 0) ? '/' : segments[0], leaf: segments[1] };
+            default:
+                var leaf = segments.pop();
+                return { parent: segments.join('/'), leaf: leaf };
+        }
+    }
+
+    ReferenceLinkMapperConstructor.splitPath = splitPath;
+
+    /**
+     * @param {string} path 
+     * @returns {string}
+     */
+    function getParentPath(path) {
+        var segments = getPathSegments(path);
+        switch (segments.length) {
+            case 1:
+                return '';
+            case 2:
+                var parent = segments[0];
+                return (parent.length > 0 || segments[1].length == 0) ? parent : '/';
+            default:
+                segments.pop();
+                return segments.join('/');
+        }
+    }
+
+    ReferenceLinkMapperConstructor.getParentPath = getParentPath;
+
+    /**
+     * @param {string} path 
+     * @returns {string[]}
+     */
+    function getPathLeaf(path) {
+        var segments = getPathSegments(path);
+        var leaf = segments.pop();
+        return (leaf.length > 0 || segments.length != 1) ? leaf : '/';
+    }
+
+    ReferenceLinkMapperConstructor.getPathLeaf = getPathLeaf;
+
+    /**
+     * @param {string} fileName 
+     * @returns {SplitFileNameComponents}
+     */
+    function splitFileNameAndExtension(fileName) {
+        var segments = fileName.split('.');
+        if (segments.length == 1)
+            return { base_name: fileName };
+        var extension = segments.pop();
+        return { base_name: segments.join('.'), extension: '.' + extension };
+    }
+    
+    ReferenceLinkMapperConstructor.splitFileNameAndExtension = splitFileNameAndExtension;
+
+    /**
+     * @param {string} fileName 
+     * @returns {string}
+     */
+    function getFileBaseName(fileName) {
+        var segments = fileName.split('.');
+        if (segments.length == 1)
+            return fileName;
+        segments.pop();
+        return segments.join('.');
+    }
+    
+    ReferenceLinkMapperConstructor.getFileBaseName = getFileBaseName;
+
+    /**
+     * @param {string} fileName 
+     * @returns {string}
+     */
+    function getFileExtension(fileName) {
+        var segments = fileName.split('.');
+        return (segments.length > 1) ? '.' + segments.pop() : '';
+    }
+    
+    ReferenceLinkMapperConstructor.getFileExtension = getFileExtension;
 
     /**
      * @param {string} pathFrom
@@ -13,12 +145,12 @@ var ReferenceLinkMapper = (function() {
             pathFrom = '' + pathFrom;
         if (typeof pathTo !== 'string')
             pathTo = '' + pathTo;
-        var fromElements = pathFrom.split('/').filter(function (e) {
-            return e.length > 0;
-        });
-        var toElements = pathTo.split('/').filter(function (e) {
-            return e.length > 0;
-        });
+        var fromElements = getPathSegments(pathFrom);
+        if (fromElements[0].length == 0)
+            fromElements.shift();
+        var toElements = getPathSegments(pathTo);
+        if (toElements[0].length == 0)
+            toElements.shift();
         if (fromElements.length == 0) return toElements.join('/');
         if (toElements.length == 0) {
             fromElements.forEach(function (elt, idx, arr) {
@@ -48,6 +180,7 @@ var ReferenceLinkMapper = (function() {
     function getInstanceUri(glideRecord) {
         return instanceUri + 'nav_to.do?uri=' + encodeURIComponent(glideRecord.getLink(true));
     }
+
     /**
      * @template {MarkdownMapping} T
      * @param {string} sys_id

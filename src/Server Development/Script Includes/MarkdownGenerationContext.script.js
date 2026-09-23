@@ -164,6 +164,22 @@ var MarkdownGenerationContext = (function () {
      * @param {string} text
      * @returns {string}
      */
+    function convertToFileName(text) {
+        return gs.nil(text)
+            ? ''
+            : text
+                  .replace(headingFragmentConvertRe, '')
+                  .trim()
+                  .replace(singleSpaceRe, '-');
+    }
+
+    MarkdownGenerationContextConstructor.convertToFileName =
+        convertToFileName;
+
+    /**
+     * @param {string} text
+     * @returns {string}
+     */
     function normalizeWhiteSpace(text) {
         return gs.nil(text)
             ? ''

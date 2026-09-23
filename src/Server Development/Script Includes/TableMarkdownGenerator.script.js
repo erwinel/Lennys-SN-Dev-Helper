@@ -33,217 +33,133 @@ var TableMarkdownGenerator = (function() {
         context.pushListItemIfTrue(tableGlideRecord.configuration_access, markdownLines);
         context.pushMultiLineItems(multiLineStack, markdownLines);
         markdown += markdownLines.join('\n') + "\n\n_______________________________________________";
-        var name = tableGlideRecord.getValue('name');
-        var gr = new GlideRecord('sys_dictionary');
-        gr.addQuery('name', name);
-        gr.addQuery('element', '!=', 'sys_id');
-        gr.addQuery('element', '!=', 'sys_updated_by');
-        gr.addQuery('element', '!=', 'sys_updated_on');
-        gr.addQuery('element', '!=', 'sys_created_by');
-        gr.addQuery('element', '!=', 'sys_mod_count');
-        gr.addQuery('element', '!=', 'sys_created_on');
-        gr.addNotNullQuery('element');
-        gr.orderBy('column_label');
-        gr.query();
-        if (gr.next()) {
-            markdown += "\n\n## Columns\n\n| Column label | Type | Reference | Display |\n| ------------ | ---- | --------- | ------- |";
+        var table_name = tableGlideRecord.getValue('name');
+        var elementGr = new GlideRecord('sys_dictionary');
+        elementGr.addQuery('name', table_name);
+        elementGr.addQuery('element', '!=', 'sys_id');
+        elementGr.addQuery('element', '!=', 'sys_updated_by');
+        elementGr.addQuery('element', '!=', 'sys_updated_on');
+        elementGr.addQuery('element', '!=', 'sys_created_by');
+        elementGr.addQuery('element', '!=', 'sys_mod_count');
+        elementGr.addQuery('element', '!=', 'sys_created_on');
+        elementGr.addQuery('sys_class_name', 'sys_dictionary');
+        elementGr.addNotNullQuery('element');
+        elementGr.orderBy('column_label');
+        elementGr.query();
+        var newFields = [];
+        if (gs.nil(tableGlideRecord.super_class))
+            while (elementGr.next()) {
+                element = elementGr.getValue('element');
+                label = gs.nil(elementGr.column_label) ? element : elementGr.getValue('column_label');
+                newFields.push({
+                    sys_id: elementGr.getUniqueValue(),
+                    label: '[" + MarkdownGenerationContext.escapeForTableCellMarkdown(label) + "](#column-" + MarkdownGenerationContext.convertToHeadingFragment(label) + ")',
+                    name: element,
+                    type: elementGr.getDisplayValue('internal_type'),
+                    reference: gs.nil(elementGr.reference) ? '         ' : context.getTableReferenceMdLink(elementGr.reference),
+                    display: elementGr.getDisplayValue('display')
+                });
+            }
+        else {
+            var tables = new GlideTableHierarchy(table_name).getTables();
+            tables.shift();
+            var superTable = tables.shift();
+            var superGr = new GlideRecord('sys_dictionary');
+            superGr.addQuery('name', superTable);
+            superGr.addNotNullQuery('element');
+            superGr.query();
+            var ignoreElements = [];
+            while (superGr.next())
+                ignoreElements.push(superGr.getValue('element'));
+            while (tables.length > 0) {
+                superTable = tables.shift();
+                superGr = new GlideRecord('sys_dictionary');
+                superGr.addQuery('name', superTable);
+                superGr.addNotNullQuery('element');
+                superGr.query();
+                while (superGr.next()) {
+                    var sen = superGr.getValue('element');
+                    if (ignoreElements.indexOf(sen) < 0)
+                        ignoreElements.push(sen);
+                }
+            }
+            while (elementGr.next()) {
+                element = elementGr.getValue('element');
+                label = gs.nil(elementGr.column_label) ? element : elementGr.getValue('column_label');
+                var newFieldItem = {
+                    sys_id: elementGr.getUniqueValue(),
+                    label: '[' + MarkdownGenerationContext.escapeForTableCellMarkdown(label) + "](#column-" + MarkdownGenerationContext.convertToHeadingFragment(label) + ')',
+                    name: element,
+                    type: elementGr.getDisplayValue('internal_type'),
+                    reference: gs.nil(elementGr.reference) ? '         ' : context.getTableReferenceMdLink(elementGr.reference),
+                    display: elementGr.getDisplayValue('display')
+                };
+                var dictionaryOverrideGr = new GlideRecord('sys_dictionary_override'); 
+                dictionaryOverrideGr.addQuery('element', element);
+                dictionaryOverrideGr.addQuery('base_table', table_name);
+                dictionaryOverrideGr.query();
+                if (ignoreElements.indexOf(element) < 0) {
+                    if (dictionaryOverrideGr.next())
+                        newFieldItem.dictionaryOverride = dictionaryOverrideGr.getUniqueValue();
+                    newFields.push(newFieldItem);
+                } else if (dictionaryOverrideGr.next()) {
+                    newFieldItem.dictionaryOverride = dictionaryOverrideGr.getUniqueValue();
+                    newFields.push(newFieldItem);
+                } else {
+                    var labelGr = new GlideRecord('sys_documentation');
+                    labelGr.addQuery('element', element);
+                    labelGr.addQuery('name', table_name);
+                    labelGr.query();
+                    if (labelGr.next())
+                        newFields.push(newFieldItem);
+                }
+                // var dictionaryOverrideGr = new GlideRecord('sys_dictionary_override');
+                // dictionaryOverrideGr.addQuery('element', element);
+                // dictionaryOverrideGr.addQuery('base_table', table_name);
+                // dictionaryOverrideGr.query();
+                // if (ignoreElements.indexOf(element) < 0) {
+                //     if (dictionaryOverrideGr.next()) {
+                //         if (dictionaryOverrideGr.display_override == true)
+                //             newFieldItem.display = dictionaryOverrideGr.getDisplayValue('display_override');
+                //         newFieldItem.dictionaryOverride = dictionaryOverrideGr.getUniqueValue();
+                //         newFields.push(newFieldItem);
+                //     }
+                // } else {
+                //     dictionaryOverrideGr.addQuery('base_table', table_name);
+                //     dictionaryOverrideGr.query();
+                //     if (dictionaryOverrideGr.next()) {
+                //         if (dictionaryOverrideGr.display_override == true)
+                //             newFieldItem.display = dictionaryOverrideGr.getDisplayValue('display_override');
+                //         newFieldItem.dictionaryOverride = dictionaryOverrideGr.getUniqueValue();
+                //     }
+                //     newFields.push(newFieldItem);
+                // }
+            }
+        }
+        if (newFields.length > 0) {
+            markdown += "\n\n## Columns\n\n| Column label | Name | Type | Reference | Display |\n| ------------ | ---- | --------- | ------- |";
             var label, element;
-            do {
-                element = gr.getValue('element');
-                label = gs.nil(gr.column_label) ? element : gr.getValue('column_label');
-                markdown += "\n| [" + MarkdownGenerationContext.escapeForTableCellMarkdown(label) + "](#column-" + MarkdownGenerationContext.convertToHeadingFragment(label) + ") | " +
-                    gr.getDisplayValue('internal_type');
-                if (gs.nil(gr.reference))
-                    markdown += " |           | ";
-                else
-                    markdown += " | " + context.getTableReferenceMdLink(gr.reference) + " | ";
-                markdown += gr.display ? "True |" : "False |";
-            } while (gr.next());
-            gr = new GlideRecord('sys_dictionary');
-            gr.addQuery('name', name);
-            gr.addQuery('element', '!=', 'sys_id');
-            gr.addQuery('element', '!=', 'sys_updated_by');
-            gr.addQuery('element', '!=', 'sys_updated_on');
-            gr.addQuery('element', '!=', 'sys_created_by');
-            gr.addQuery('element', '!=', 'sys_mod_count');
-            gr.addQuery('element', '!=', 'sys_created_on');
-            gr.addNotNullQuery('element');
-            gr.orderBy('column_label');
-            gr.query();
-            while (gr.next()) {
-                element = gr.getValue('element');
-                label = gs.nil(gr.column_label) ? element : gr.getValue('column_label');
+            newFields.forEach(function(newFieldItem) {
+                markdown += "\n| " + newFieldItem.label + " | " + newFieldItem.name + " | " + newFieldItem.type + " | " + newFieldItem.reference + " | " + newFieldItem.display + " |";
+            });
+            newFields.forEach(function(newFieldItem) {
+                elementGr = new GlideRecord('sys_dictionary');
+                var dictionaryOverrideGr;
+                if (newFieldItem.dictionaryOverride) {
+                    dictionaryOverrideGr = new GlideRecord('sys_dictionary_override');
+                    dictionaryOverrideGr.get(newFieldItem.dictionaryOverride);
+                }
+                elementGr.get(newFieldItem.sys_id);
+                element = elementGr.getValue('element');
+                label = gs.nil(elementGr.column_label) ? element : elementGr.getValue('column_label');
                 markdown += "\n\n### Column: " + label + "\n\n";
                 markdownLines = [];
                 multiLineStack = [];
-                context.pushDisplayValueListItem(gr.internal_type, markdownLines, multiLineStack, true);
-                if (!gs.nil(gr.comments))
-                    context.pushDisplayValueListItem(gr.comments, markdownLines, multiLineStack, true);
-                context.pushValueListItem(gr.element, markdownLines, multiLineStack);
-                var fieldClassGr = gr.internal_type.getRefRecord();
-                // switch (fieldClassGr.getValue('name')) {
-                //     case "action_conditions": // Action Conditions; string
-                //     case "approval_rules": // Approval Rules; string
-                //     case "audio": // Audio; string
-                //     case "auto_increment": // Auto Increment; longint
-                //     case "auto_number": // Auto Number; string
-                //     case "boolean": // True/False; boolean
-                //     case "bootstrap_color": // Bootstrap color; string
-                //     case "breakdown_element": // Breakdown Element; GUID
-                //     case "calendar_date_time": // Calendar Date/Time; datetime
-                //     case "catalog_preview": // Catalog Preview; string
-                //     case "char": // Char; GUID
-                //     case "choice": // Choice; string
-                //     case "collection": // Collection; string
-                //     case "color": // Color; string
-                //     case "color_display": // Color Display; string
-                //     case "composite_field": // Composite Field; string
-                //     case "composite_name": // Composite Name; string
-                //     case "compressed": // Compressed; string
-                //     case "conditions": // Conditions; string
-                //     case "condition_string": // Condition String; string
-                //     case "counter": // Counter; string
-                //     case "css": // CSS; string
-                //     case "currency": // Currency; decimal
-                //     case "currency2": // FX Currency; GUID
-                //     case "data_array": // Data Array; string
-                //     case "data_object": // Data Object; string
-                //     case "data_structure": // Data Structure; string
-                //     case "date": // Other Date; date
-                //     case "datetime": // Basic Date/Time; datetime
-                //     case "days_of_week": // Days of Week; string
-                //     case "day_of_week": // Day of Week; integer
-                //     case "decimal": // Decimal; decimal
-                //     case "decoration": // Decoration; string
-                //     case "documentation_field": // Documentation Field; string
-                //     case "document_id": // Document ID; GUID
-                //     case "domain_id": // Domain ID; GUID
-                //     case "domain_path": // Domain Path; string
-                //     case "due_date": // Due Date; datetime
-                //     case "dynamic_attribute_store": // Dynamic Attribute Store; string
-                //     case "email": // Email; string
-                //     case "email_script": // Email Script; string
-                //     case "expression": // Expression; string
-                //     case "external_names": // External Names; string
-                //     case "field_list": // Field List; string
-                //     case "field_name": // Field Name; string
-                //     case "file_attachment": // File Attachment; string
-                //     case "float": // Floating Point Number; float
-                //     case "formula": // Formula; string
-                //     case "geo_point": // Geo Point; string
-                //     case "glide_action_list": // UI Action List; string
-                //     case "glide_date": // Date; date
-                //     case "glide_date_time": // Date/Time; datetime
-                //     case "glide_duration": // Duration; datetime
-                //     case "glide_list": // List; string
-                //     case "glide_precise_time": // Precise Time; string
-                //     case "glide_time": // Time; datetime
-                //     case "glide_utc_time": // UTC Time; datetime
-                //     case "glide_var": // Glide Var; string
-                //     case "glyphicon": // Glyph Icon (Bootstrap); string
-                //     case "graphql_schema": // GraphQL Schema; string
-                //     case "GUID": // Sys ID (GUID); string
-                //     case "html": // HTML; string
-                //     case "html_script": // HTML Script; string
-                //     case "html_template": // HTML Template; string
-                //     case "icon": // Icon; string
-                //     case "image": // Basic Image; string
-                //     case "index_name": // Index Name; string
-                //     case "int": // Integer String; string
-                //     case "integer": // Integer; integer
-                //     case "integer_date": // Integer Date; integer
-                //     case "integer_time": // Integer Time; integer
-                //     case "internal_type": // Internal Type; string
-                //     case "ip_addr": // IP Address (Validated IPV4, IPV6); string
-                //     case "ip_address": // IP Address; string
-                //     case "journal": // Journal; string
-                //     case "journal_input": // Journal Input; string
-                //     case "journal_list": // Journal List; string
-                //     case "json": // JSON; string
-                //     case "json_translations": // JSON Translations; string
-                //     case "language": // Language; string
-                //     case "long": // Long Integer String; string
-                //     case "longint": // Long; longint
-                //     case "mask_code": // Mask Code; string
-                //     case "metric_absolute": // Metric Absolute; float
-                //     case "metric_counter": // Metric Counter; float
-                //     case "metric_derive": // Metric Derive; float
-                //     case "metric_gauge": // Metric Gauge; float
-                //     case "mid_config": // MID Server Configuration; string
-                //     case "month_of_year": // Month of Year; integer
-                //     case "multi_small": // Multiple Line Small Text Area; string
-                //     case "multi_two_lines": // Two Line Text Area; string
-                //     case "name_values": // Name/Values; string
-                //     case "nds_icon": // NDS Icon; string
-                //     case "nl_task_int1": // NL Task Integer 1; integer
-                //     case "order_index": // Order Index; integer
-                //     case "password": // Password (1 Way Encrypted); string
-                //     case "password2": // Password (2 Way Encrypted); string
-                //     case "percent_complete": // Percent Complete; decimal
-                //     case "phone_number": // Phone Number (Unused); string
-                //     case "phone_number_e164": // Phone Number (E164); string
-                //     case "ph_number": // Phone Number; string
-                //     case "price": // Price; decimal
-                //     case "properties": // Properties; string
-                //     case "radio": // Radio Button Choice; string
-                //     case "records": // Records; string
-                //     case "record_hierarchy_path": // Record Hierarchy Path; string
-                //     case "reference": // Reference; GUID
-                //     case "reference_name": // Reference Name; string
-                //     case "related_tags": // Related Tags; string
-                //     case "reminder_field_name": // Reminder Field Name; string
-                //     case "repeat_count": // Repeat Count; integer
-                //     case "repeat_type": // Repeat Type; string
-                //     case "replication_payload": // Replication Payload; string
-                //     case "schedule_date_time": // Schedule Date/Time; string
-                //     case "schedule_interval_count": // ; integer
-                //     case "script": // Script; string
-                //     case "script_client": // Script (Client); string
-                //     case "script_plain": // Script (Plain); string
-                //     case "script_server": // Script (server side); string
-                //     case "short_field_name": // Short Field Name; string
-                //     case "short_table_name": // Short Table Name; string
-                //     case "simple_name_values": // Name-Value Pairs; string
-                //     case "slushbucket": // Slush Bucket; string
-                //     case "snapshot_template_value": // Snapshot Template Value; string
-                //     case "source_id": // Source ID; GUID
-                //     case "source_name": // Source Name; string
-                //     case "source_table": // Source Table; string
-                //     case "string": // String; string
-                //     case "string_boolean": // ; string
-                //     case "string_full_utf8": // String (Full UTF-8); string
-                //     case "structure": // Structure; string
-                //     case "sysevent_name": // System Event Name; string
-                //     case "sysrule_field_name": // System Rule Field Name; string
-                //     case "sys_class_name": // System Class Name; string
-                //     case "sys_class_path": // System Class path; string
-                //     case "table_name": // Table Name; string
-                //     case "template_value": // Template Value; string
-                //     case "time": // Basic Time; time
-                //     case "timer": // Timer; datetime
-                //     case "translated": // Translated; string
-                //     case "translated_field": // Translated Field; string
-                //     case "translated_html": // Translated HTML; string
-                //     case "translated_text": // Translated Text; string
-                //     case "tree_code": // Tree Code; string
-                //     case "tree_path": // Tree Path; string
-                //     case "url": // URL; string
-                //     case "user_image": // Image; string
-                //     case "user_input": // User Input; string
-                //     case "user_roles": // User Roles; string
-                //     case "variables": // Variables; string
-                //     case "variable_conditions": // Variable Conditions; string
-                //     case "variable_template_value": // Variable template value; string
-                //     case "version": // Version; string
-                //     case "video": // Video; string
-                //     case "week_of_month": // Week of Month; integer
-                //     case "wide_text": // Wide Text; string
-                //     case "wiki_text": // Wiki; string
-                //     case "wms_job": // WMS Job; string
-                //     case "workflow": // Workflow; string
-                //     case "workflow_conditions": // Workflow Conditions; string
-                //     case "xml": // XML; string
-                // }
+                context.pushDisplayValueListItem(elementGr.internal_type, markdownLines, multiLineStack, true);
+                if (!gs.nil(elementGr.comments))
+                    context.pushDisplayValueListItem(elementGr.comments, markdownLines, multiLineStack, true);
+                context.pushValueListItem(elementGr.element, markdownLines, multiLineStack);
+                var fieldClassGr = elementGr.internal_type.getRefRecord();
                 switch (fieldClassGr.getValue('name')) {
                     case "compressed": // Compressed; string
                     case "html": // HTML; string
@@ -256,41 +172,69 @@ var TableMarkdownGenerator = (function() {
                     case "url": // URL; string
                     case "wide_text": // Wide Text; string
                     case "wiki_text": // Wiki; string
-                        context.pushDisplayValueListItem(gr.max_length, markdownLines, multiLineStack);
+                        context.pushDisplayValueListItem(elementGr.max_length, markdownLines, multiLineStack);
                         break;
                 }
-                context.pushListItemIfFalse(gr.active, markdownLines);
-                context.pushListItemIfTrue(gr.function_field, markdownLines);
-                context.pushListItemIfTrue(gr.read_only, markdownLines);
-                context.pushListItemIfTrue(gr.mandatory, markdownLines);
-                context.pushListItemIfTrue(gr.display, markdownLines);
-                context.pushValueListItem(gr.attributes, markdownLines, multiLineStack);
-                if (!gs.nil(gr.reference)) {
-                    context.pushTableReferenceListItem(gr.reference, markdownLines);
-                    context.pushDisplayValueListItem(gr.use_reference_qualifier, markdownLines, multiLineStack);
-                    context.pushDisplayValueListItem(gr.dynamic_ref_qual, markdownLines, multiLineStack);
-                    context.pushDisplayValueListItem(gr.reference_key, markdownLines, multiLineStack);
-                    context.pushDisplayValueListItem(gr.reference_cascade_rule, markdownLines, multiLineStack);
-                    context.pushListItemIfTrue(gr.reference_floats, markdownLines);
-                    context.pushListItemIfTrue(gr.dynamic_creation, markdownLines);
+                context.pushListItemIfFalse(elementGr.active, markdownLines);
+                context.pushListItemIfTrue(elementGr.function_field, markdownLines);
+                if (dictionaryOverrideGr && dictionaryOverrideGr.read_only_override == true)
+                    context.pushListItemIfTrue(dictionaryOverrideGr.read_only, markdownLines);
+                else
+                    context.pushListItemIfTrue(elementGr.read_only, markdownLines);
+                if (dictionaryOverrideGr && dictionaryOverrideGr.mandatory_override == true)
+                    context.pushListItemIfTrue(dictionaryOverrideGr.mandatory, markdownLines);
+                else
+                    context.pushListItemIfTrue(elementGr.mandatory, markdownLines);
+                if (dictionaryOverrideGr && dictionaryOverrideGr.display_override == true)
+                    markdownLines.push("- **" + MarkdownGenerationContext.escapeForMarkdown(elementGr.display.getLabel()) + ":** True");
+                else
+                    context.pushListItemIfTrue(elementGr.display, markdownLines);
+                if (dictionaryOverrideGr && dictionaryOverrideGr.attributes_override == true)
+                    context.pushValueListItem(dictionaryOverrideGr.attributes, markdownLines, multiLineStack);
+                else
+                    context.pushValueListItem(elementGr.attributes, markdownLines, multiLineStack);
+                if (!gs.nil(elementGr.reference)) {
+                    context.pushTableReferenceListItem(elementGr.reference, markdownLines);
+                    context.pushDisplayValueListItem(elementGr.use_reference_qualifier, markdownLines, multiLineStack);
+                    if (dictionaryOverrideGr && dictionaryOverrideGr.reference_qual_override == true)
+                        context.pushDisplayValueListItem(dictionaryOverrideGr.reference_qual, markdownLines, multiLineStack);
+                    else
+                        context.pushDisplayValueListItem(elementGr.reference_qual_condition, markdownLines, multiLineStack);
+                    context.pushDisplayValueListItem(elementGr.dynamic_ref_qual, markdownLines, multiLineStack);
+                    context.pushDisplayValueListItem(elementGr.reference_key, markdownLines, multiLineStack);
+                    context.pushDisplayValueListItem(elementGr.reference_cascade_rule, markdownLines, multiLineStack);
+                    context.pushListItemIfTrue(elementGr.reference_floats, markdownLines);
+                    context.pushListItemIfTrue(elementGr.dynamic_creation, markdownLines);
                 }
-                if (!gs.nil(gr.choice) && gr.getValue('choice') != '0')
-                    context.pushDisplayValueListItem(gr.choice, markdownLines, multiLineStack);
-                context.pushTableReferenceListItem(gr.choice_table, markdownLines);
-                context.pushTableReferenceListItem(gr.dependent, markdownLines);
-                if (gr.getDisplayValue('use_dependent_field') == 'true') {
-                    context.pushListItemIfTrue(gr.use_dependent_field, markdownLines);
-                    context.pushFieldReferenceListItem(tableGlideRecord.name, gr.dependent_on_field, markdownLines, name);
+                if (!gs.nil(elementGr.choice) && elementGr.getValue('choice') != '0')
+                    context.pushDisplayValueListItem(elementGr.choice, markdownLines, multiLineStack);
+                context.pushTableReferenceListItem(elementGr.choice_table, markdownLines);
+                
+                if (dictionaryOverrideGr && dictionaryOverrideGr.dependent_override == true)
+                    context.pushListItemIfTrue(dictionaryOverrideGr.dependent, markdownLines);
+                else
+                    context.pushTableReferenceListItem(elementGr.dependent, markdownLines);
+                if (elementGr.getDisplayValue('use_dependent_field') == 'true') {
+                    context.pushListItemIfTrue(elementGr.use_dependent_field, markdownLines);
+                    context.pushFieldReferenceListItem(tableGlideRecord.name, elementGr.dependent_on_field, markdownLines, table_name);
                 }
-                if (gr.getDisplayValue('virtual') == 'true') {
-                    context.pushListItemIfTrue(gr.virtual, markdownLines);
-                    context.pushCodeListItem(gr.formula, 'javascript', markdownLines, multiLineStack);
+                if (elementGr.getDisplayValue('virtual') == 'true') {
+                    context.pushListItemIfTrue(elementGr.virtual, markdownLines);
+                    context.pushCodeListItem(elementGr.formula, 'javascript', markdownLines, multiLineStack);
                 }
-                context.pushValueListItem(gr.default_value, markdownLines, multiLineStack);
+                if (dictionaryOverrideGr && dictionaryOverrideGr.calculation_override == true)
+                    context.pushValueListItem(dictionaryOverrideGr.calculation, markdownLines, multiLineStack);
+                else
+                    context.pushValueListItem(elementGr.calculation, markdownLines, multiLineStack);
+                
+                if (dictionaryOverrideGr && dictionaryOverrideGr.default_value_override == true)
+                    context.pushListItemIfTrue(dictionaryOverrideGr.default_value, markdownLines);
+                else
+                    context.pushValueListItem(elementGr.default_value, markdownLines, multiLineStack);
                 context.pushMultiLineItems(multiLineStack, markdownLines);
                 markdown += markdownLines.join("\n");
                 var aclGr = new GlideRecord('sys_security_acl');
-                aclGr.addQuery(name + '.' + element);
+                aclGr.addQuery(table_name + '.' + element);
                 aclGr.query();
                 if (aclGr.next()) {
                     markdown += "\n\n**Access Controls:**\n\n| Name | Decision Type | Question | Type | Active |\n| ---- | ------------- | -------- | ---- | ------ |";
@@ -299,7 +243,7 @@ var TableMarkdownGenerator = (function() {
                     } while (aclGr.next);
                 }
                 var cGr = new GlideRecord('sys_choice');
-                cGr.addQuery('name', name);
+                cGr.addQuery('name', table_name);
                 cGr.addQuery('element', element);
                 cGr.query();
                 if (cGr.next()) {
@@ -387,7 +331,7 @@ var TableMarkdownGenerator = (function() {
                             markdown += "\n| " + choices[i].label + ' | ' + choices[i].value + ' | ' + choices[i].sequence + ' |';
                     }
                 }
-            }
+            });
         }
         return markdown.trim() + "\n";
     }
