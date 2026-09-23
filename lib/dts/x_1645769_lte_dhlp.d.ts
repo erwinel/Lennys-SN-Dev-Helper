@@ -242,6 +242,7 @@ declare interface SplitFileNameComponents {
 }
 
 declare interface ReferenceLinkMapperConstructor {
+    isWebLink(path: string): boolean;
     getPathSegments(path: string): string[];
     normalizePath(path: string): string;
     splitPath(path: string): SplitPathComponents;
