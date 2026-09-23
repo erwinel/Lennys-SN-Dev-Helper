@@ -61,8 +61,6 @@ declare interface MarkdownGenerationContextConstructor {
 
     escapeForTableCellMarkdown(text: string): string;
 
-    escapeForTableCellMarkdown(text: string): string;
-
     minimalEscapeForTableCellMarkdown(text: string): string;
 
     escapeForMarkdownStartOfLine(text: string): string;
@@ -70,6 +68,8 @@ declare interface MarkdownGenerationContextConstructor {
     minimalEscapeForMarkdownStartOfLine(text: string): string;
 
     convertToHeadingFragment(text: string): string;
+
+        convertToFileName(text: string): string;
 
     normalizeWhiteSpace(text: string): string;
 
@@ -103,10 +103,12 @@ declare interface MarkdownGenerationContext {
     pushCodeBlockListItem(glideElement: GlideElement, language: string, multiLineStack: LabeledMultilineStackItem[]): void;
     pushCodeListItem(glideElement: GlideElement, language: string, markdownLines: string[], multiLineStack: LabeledMultilineStackItem[], showEmpty?: boolean): void;
     pushBoolean(glideElement: GlideElement, markdownLines: string[], showEmpty?: boolean): void;
-    pushListItemIfTrue(glideElement: GlideElement, markdownLines: string[]): void;
-    pushListItemIfFalse(glideElement: GlideElement, markdownLines: string[]): void;
+    pushListItemIfTrue(glideElement: GlideElement, markdownLines: string[]): boolean | undefined;
+    pushListItemIfFalse(glideElement: GlideElement, markdownLines: string[]): boolean | undefined;
     pushImageListItem(glideElement: GlideElement, markdownLines: string[], showEmpty?: boolean): void;
     pushMultiLineItems(multiLineStack: LabeledMultilineStackItem[], markdownLines: string[]): void;
+
+    mapper: ReferenceLinkMapper;
 
     type: "MarkdownGenerationContext";
 }
@@ -153,7 +155,7 @@ declare interface VariableMap {
     findVariableByName(varName: string): VariableFindResult | undefined;
     getVariableByName(varName: string): QuestionItem | undefined;
     getNestedVariableByName(varName: string): QuestionItem | undefined;
-    pushVariablesSectionMarkdown(context: MarkdownGenerationContext, markdownLines: string[]): void;
+    pushVariablesSectionMarkdown(context: MarkdownGenerationContext, uiPolicies: UIPolicyInfo[], clientScripts: ClientScriptInfo[], markdownLines: string[]): void;
     
     type: "VariableMap";
 }
@@ -192,11 +194,6 @@ declare type VarSetMarkdownMapping = MarkdownMapping & {
     internal_name: string;
 }
 
-declare interface MarkdownEscapeOptions {
-    table_cell_content?: boolean;
-    start_of_line?: boolean;
-}
-
 declare interface ReferenceLinkMapperConstructor {
     new(): ReferenceLinkMapper;
 }
@@ -226,6 +223,43 @@ declare var ReferenceLinkMapper: ReferenceLinkMapperConstructor;
 
 declare interface ServiceCatalogMarkdownGenerator {
     type: 'ServiceCatalogMarkdownGenerator';
+}
+
+declare type TrueFalseOrLeaveAlone = "True" | "False" | "Leave alone";
+
+declare interface UIPolicyActionInfo {
+    sys_id: string;
+    variable: string;
+    mandatory: TrueFalseOrLeaveAlone;
+    visible: TrueFalseOrLeaveAlone;
+    disabled: TrueFalseOrLeaveAlone;
+    order?: ValueAndDisplay<number>;
+    value_action: string;
+}
+
+declare interface UIPolicyInfo {
+    sys_id: string;
+    fragment: string;
+    short_description: string;
+    catalog_conditions?: string;
+    applies_catalog: boolean;
+    applies_sc_task: boolean;
+    applies_req_item: boolean;
+    order?: ValueAndDisplay<number>;
+    actions: UIPolicyActionInfo[];
+}
+
+declare interface ClientScriptInfo {
+    sys_id: string;
+    variable: string;
+    fragment: string;
+    name: string;
+    applies_catalog: boolean;
+    applies_sc_task: boolean;
+    applies_req_item: boolean;
+    applies_extended: boolean;
+    global: boolean;
+    order?: ValueAndDisplay<number>;
 }
 
 declare interface ServiceCatalogMarkdownGeneratorConstructor {
