@@ -17,6 +17,12 @@ declare interface MarkdownLink {
 
 declare type MarkdownLinkMap  = { [key: string]: MarkdownLink };
 
+declare interface LTEDevHelper extends IAbstractAjaxProcessor {
+    getCatalogItemMarkdown(): string;
+    getVariableSetMarkdown(): string;
+    type: 'LTEDevHelper';
+}
+
 declare interface LTEDevHelperConstructor {
     /**
      * @param {string} text
@@ -44,6 +50,8 @@ declare interface LTEDevHelperConstructor {
      * @return {string}
      */
     getVariableSetMarkdown(target: GlideRecordSecure | string, referenceMap: MarkdownLinkMap): string;
+    
+    new(request: GlideServletRequest, responseXML: XMLDocument2, gc: any): LTEDevHelper;
 }
 
 declare var LTEDevHelper: LTEDevHelperConstructor;
@@ -115,6 +123,12 @@ declare interface MarkdownGenerationContext {
 
 declare var MarkdownGenerationContext: MarkdownGenerationContextConstructor;
 
+declare interface TableMarkdownGenerator extends IAbstractAjaxProcessor {
+    getTableMarkdown(): string;
+    attachMarkdown(): string;
+    type: 'TableMarkdownGenerator';
+}
+
 declare interface TableMarkdownGeneratorConstructor {
     /**
      * @param {(GlideRecord | GlideRecordSecure)} tableGlideRecord - sys_db_object
@@ -122,6 +136,18 @@ declare interface TableMarkdownGeneratorConstructor {
      * @return {string}
      */
     getTableMarkdown(tableGlideRecord: GlideRecord | GlideRecordSecure, context: MarkdownGenerationContext): string;
+
+    /**
+     * Generatese a markdown documentation file for a Table and attaches it to the current user's record so it can be downloaded.
+     *
+     * @param {(GlideRecord | GlideRecordSecure)} sourceGlideRecord - The source Table [sys_db_object] GlideRecord.
+     * @param {string} [current_folder] - The optional current folder for relative links.
+     * @return {GenerateAttachmentResult}
+     * @memberof TableMarkdownGeneratorConstructor
+     */
+    attachMarkdown(sourceGlideRecord: GlideRecord | GlideRecordSecure, current_folder?: string): GenerateAttachmentResult;
+
+    new(request: GlideServletRequest, responseXML: XMLDocument2, gc: any): TableMarkdownGenerator;
 }
 
 declare var TableMarkdownGenerator: TableMarkdownGeneratorConstructor;
@@ -195,6 +221,15 @@ declare type VarSetMarkdownMapping = MarkdownMapping & {
 }
 
 declare type TrueFalseOrLeaveAlone = "True" | "False" | "Leave alone";
+
+declare interface MarkdownEscapeOptions {
+    table_cell_content?: boolean;
+    start_of_line?: boolean;
+}
+
+declare interface ReferenceLinkMapperConstructor {
+    new(): ReferenceLinkMapper;
+}
 
 declare interface UIPolicyActionInfo {
     sys_id: string;
@@ -278,73 +313,138 @@ declare interface ReferenceLinkMapper {
 
 declare var ReferenceLinkMapper: ReferenceLinkMapperConstructor;
 
-declare interface GenerateAttachmentSuccessResult {
+/**
+ * Represents a successful file attachment insert or lookup.
+ *
+ * @interface GenerateAttachmentResultSuccess
+ */
+declare interface GenerateAttachmentResultSuccess {
     success: true;
-    /** The file name of the attachment */
+
+    /**
+     * The name of the attached file.
+     *
+     * @type {string}
+     * @memberof GenerateAttachmentResultSuccess
+     */
     file_name: string;
 
-    /** The unique identifier of the attachment */
+    /**
+     * The unique identifier of the Attachment [sys_attachment] record.
+     *
+     * @type {string}
+     * @memberof GenerateAttachmentResultSuccess
+     */
     sys_id: string;
 }
-declare interface GenerateAttachmentFailureResult {
+
+declare interface GenerateAttachmentResultFail {
     success?: false;
 
-    /** The errpr message */
+    /**
+     * The error message for the failed operation.
+     *
+     * @type {string}
+     * @memberof GenerateAttachmentResultFail
+     */
     message: string;
 }
 
-declare type GenerateAttachmentResult = GenerateAttachmentSuccessResult | GenerateAttachmentFailureResult;
+/**
+ * Represents the results of an attempt for a file attachment insert or lookup.
+ */
+declare type GenerateAttachmentResult = GenerateAttachmentResultSuccess | GenerateAttachmentResultFail;
+
+declare interface ServiceCatalogMarkdownGenerator extends IAbstractAjaxProcessor {
+    attachCatalogItemMarkdown(): string;
+    attachVariableSetMarkdown(): string;
+    getCatalogItemMarkdown(): string;
+    getVariableSetMarkdown(): string;
+    type: 'ServiceCatalogMarkdownGenerator';
+}
 
 declare interface ServiceCatalogMarkdownGeneratorConstructor {
     /**
-     * Generates markdown from a Record Producer.
+     * Generates markdown documentation for a Record Producer.
      *
-     * @param {(GlideRecord | GlideRecordSecure)} catItemGr - The Record Producer [sc_cat_item_producer] record to create the markdown for.
-     * @param {MarkdownGenerationContext} context - The context object for markdown generation.
-     * @return {string} The generated markdown
+     * @param {(GlideRecord | GlideRecordSecure)} recordProducerGr - The Record Producer [sc_cat_item_producer] to generate markdown documentation for.
+     * @param {MarkdownGenerationContext} context - The markdown generation context to use.
+     * @return {string} The markdown code for Record Producer documentation.
      * @memberof ServiceCatalogMarkdownGeneratorConstructor
      */
-    getRecordProducerMarkdown(catItemGr: GlideRecord | GlideRecordSecure, context: MarkdownGenerationContext): string;
+    getRecordProducerMarkdown(recordProducerGr: GlideRecord | GlideRecordSecure, context: MarkdownGenerationContext): string;
 
     /**
-     * Generates markdown from a Catalog Item.
+     * Generates markdown documentation for a Catalog Item.
      *
-     * @param {(GlideRecord | GlideRecordSecure)} catItemGr - The Catalog Item [sc_cat_item] record to create the markdown for.
-     * @param {MarkdownGenerationContext} context - The context object for markdown generation.
-     * @return {string} The generated markdown
+     * @param {(GlideRecord | GlideRecordSecure)} catItemGr - The Catalog Item [sc_cat_item] to generate markdown documentation for.
+     * @param {MarkdownGenerationContext} context - The markdown generation context to use.
+     * @return {string} The markdown code for Catalog Item documentation.
      * @memberof ServiceCatalogMarkdownGeneratorConstructor
      */
     getCatalogItemMarkdown(catItemGr: GlideRecord | GlideRecordSecure, context: MarkdownGenerationContext): string;
-
+    
     /**
-     * Generates markdown from a Variable Set.
+     * Generates markdown documentation for a Variable Set.
      *
-     * @param {(GlideRecord | GlideRecordSecure)} varSetGr - The Variable Set [item_option_new_set] record to create the markdown for.
-     * @param {MarkdownGenerationContext} context - The context object for markdown generation.
-     * @return {string} The generated markdown
+     * @param {(GlideRecord | GlideRecordSecure)} varSetGr - The Variable Set [item_option_new_set] to generate markdown documentation for.
+     * @param {MarkdownGenerationContext} context - The markdown generation context to use.
+     * @return {string} The markdown code for Variable Set documentation.
      * @memberof ServiceCatalogMarkdownGeneratorConstructor
      */
     getVariableSetMarkdown(varSetGr: GlideRecord | GlideRecordSecure, context: MarkdownGenerationContext): string;
-
+    
     /**
-     * Attaches a markdown document file containing Catalog Item details to the current user's record so it can be downloaded.
+     * Generatese a markdown documentation file for a Catalog Item and attaches it to the current user's record so it can be downloaded.
      *
-     * @param {(GlideRecord | GlideRecordSecure)} catItemGr - The Catalog Item [sc_cat_item] record to create the markdown for.
-     * @param {string} [current_folder] - The optional current folder for relative link context.
+     * @param {(GlideRecord | GlideRecordSecure)} sourceGlideRecord - The source GlideRecord whose table is Catalog Item [sc_cat_item] or a derived table.
+     * @param {string} [current_folder] - The optional current folder for relative links.
      * @return {GenerateAttachmentResult}
      * @memberof ServiceCatalogMarkdownGeneratorConstructor
      */
-    attachCatalogItemMarkdown(catItemGr: GlideRecord | GlideRecordSecure, current_folder?: string): GenerateAttachmentResult;
-
+    attachCatalogItemMarkdown(sourceGlideRecord: GlideRecord | GlideRecordSecure, current_folder?: string): GenerateAttachmentResult;
+    
     /**
-     * Attaches a markdown document file containing Variable Set details to the current user's record so it can be downloaded.
+     * Generatese a markdown documentation file for a Variable Set and attaches it to the current user's record so it can be downloaded.
      *
-     * @param {(GlideRecord | GlideRecordSecure)} varSetGr - The Variable Set [item_option_new_set] record to create the markdown attachment for.
-     * @param {string} [current_folder] - The optional current folder for relative link context.
+     * @param {(GlideRecord | GlideRecordSecure)} sourceGlideRecord - The source Variable Set [item_option_new_set] GlideRecord.
+     * @param {string} [current_folder] - The optional current folder for relative links.
      * @return {GenerateAttachmentResult}
      * @memberof ServiceCatalogMarkdownGeneratorConstructor
      */
-    attachVariableSetMarkdown(varSetGr: GlideRecord | GlideRecordSecure, current_folder?: string): GenerateAttachmentResult;
+    attachVariableSetMarkdown(sourceGlideRecord: GlideRecord | GlideRecordSecure, current_folder?: string): GenerateAttachmentResult;
+
+    new(request: GlideServletRequest, responseXML: XMLDocument2, gc: any): ServiceCatalogMarkdownGenerator;
 }
 
 declare var ServiceCatalogMarkdownGenerator: ServiceCatalogMarkdownGeneratorConstructor;
+
+declare interface FlowMarkdownGenerator extends IAbstractAjaxProcessor {
+    attachMarkdown(): string;
+    type: 'FlowMarkdownGenerator';
+}
+
+declare interface FlowMarkdownGeneratorConstructor {
+    /**
+     * Generates markdown documentation for a Flow.
+     *
+     * @param {(GlideRecord | GlideRecordSecure)} sourceGlideRecord - The source Flow [sys_hub_flow] GlideRecord.
+     * @param {MarkdownGenerationContext} context - The markdown generation context to use.
+     * @return {string} The markdown code for Flow documentation.
+     * @memberof FlowMarkdownGeneratorConstructor
+     */
+    generateMarkdown(sourceGlideRecord: GlideRecord | GlideRecordSecure, context: MarkdownGenerationContext): string;
+    /**
+     * Generatese a markdown documentation file for a Flow and attaches it to the current user's record so it can be downloaded.
+     *
+     * @param {(GlideRecord | GlideRecordSecure)} sourceGlideRecord - The source Flow [sys_hub_flow] GlideRecord.
+     * @param {string} [current_folder] - The optional current folder for relative links.
+     * @return {GenerateAttachmentResult}
+     * @memberof FlowMarkdownGeneratorConstructor
+     */
+    attachMarkdown(sourceGlideRecord: GlideRecord | GlideRecordSecure, current_folder?: string): GenerateAttachmentResult;
+
+    new(request: GlideServletRequest, responseXML: XMLDocument2, gc: any): FlowMarkdownGenerator;
+}
+
+declare var FlowMarkdownGenerator: FlowMarkdownGeneratorConstructor;
